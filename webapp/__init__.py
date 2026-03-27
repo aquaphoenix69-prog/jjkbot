@@ -1,1 +1,0 @@
-"""Yutafraud web dashboard package."""

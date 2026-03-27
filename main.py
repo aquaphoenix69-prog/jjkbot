@@ -2,7 +2,6 @@ import asyncio
 import logging
 
 from bot.bot import JJKBot
-from webapp.app import app
 
 
 def configure_logging() -> None:
