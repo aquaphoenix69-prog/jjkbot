@@ -4,7 +4,7 @@ import random
 from datetime import UTC, date, datetime, timedelta
 
 from bot.config import get_settings
-from bot.data.characters import BANNERS, CHARACTERS
+from bot.data.characters import CHARACTERS, SUMMON_TYPES
 from bot.db.database import Database
 from bot.models.game import CharacterDefinition, OwnedCharacter, PlayerProfile
 
@@ -25,20 +25,21 @@ class GameService:
             await self.db.execute(
                 """
                 INSERT INTO character_catalog (
-                    key, name, title, rarity, grade_label, base_hp, base_attack,
+                    key, name, title, rarity, grade_label, image_url, base_hp, base_attack,
                     base_defense, base_speed, base_energy, basic_skill,
                     ultimate_skill, passive, domain_name, banner_tags, drop_weight, quote
                 )
                 VALUES (
-                    $1, $2, $3, $4, $5, $6, $7,
-                    $8, $9, $10, $11,
-                    $12, $13, $14, $15, $16, $17
+                    $1, $2, $3, $4, $5, $6, $7, $8,
+                    $9, $10, $11, $12,
+                    $13, $14, $15, $16, $17, $18
                 )
                 ON CONFLICT (key) DO UPDATE SET
                     name = EXCLUDED.name,
                     title = EXCLUDED.title,
                     rarity = EXCLUDED.rarity,
                     grade_label = EXCLUDED.grade_label,
+                    image_url = EXCLUDED.image_url,
                     base_hp = EXCLUDED.base_hp,
                     base_attack = EXCLUDED.base_attack,
                     base_defense = EXCLUDED.base_defense,
@@ -57,6 +58,7 @@ class GameService:
                 character.title,
                 character.rarity,
                 character.grade,
+                character.image_url,
                 character.base_hp,
                 character.base_attack,
                 character.base_defense,
@@ -143,7 +145,7 @@ class GameService:
         records = await self.db.fetch(
             """
             SELECT pc.*, cc.name, cc.title, cc.rarity, cc.grade_label, cc.base_hp,
-                   cc.base_attack, cc.base_defense, cc.base_speed, cc.base_energy,
+                   cc.image_url, cc.base_attack, cc.base_defense, cc.base_speed, cc.base_energy,
                    cc.basic_skill, cc.ultimate_skill, cc.passive, cc.domain_name,
                    cc.banner_tags, cc.drop_weight, cc.quote
             FROM player_characters pc
@@ -161,7 +163,7 @@ class GameService:
         row = await self.db.fetchrow(
             """
             SELECT pc.*, cc.name, cc.title, cc.rarity, cc.grade_label, cc.base_hp,
-                   cc.base_attack, cc.base_defense, cc.base_speed, cc.base_energy,
+                   cc.image_url, cc.base_attack, cc.base_defense, cc.base_speed, cc.base_energy,
                    cc.basic_skill, cc.ultimate_skill, cc.passive, cc.domain_name,
                    cc.banner_tags, cc.drop_weight, cc.quote
             FROM player_characters pc
@@ -217,26 +219,24 @@ class GameService:
         return bool(locked)
 
     async def summon(
-        self, player_id: int, banner_key: str, amount: int, use_crystals: bool
+        self, player_id: int, summon_type: str, amount: int
     ) -> tuple[list[OwnedCharacter], PlayerProfile]:
         profile = await self.get_profile_by_player_id(player_id)
-        cost_per = self.settings.summon_cost_crystals if use_crystals else self.settings.summon_cost_coins
-        resource_name = "crystals" if use_crystals else "coins"
+        summon_data = SUMMON_TYPES.get(summon_type)
+        if not summon_data:
+            raise ValueError("Unknown summon type.")
+        cost_per = summon_data["cost"]
+        resource_name = "coins"
         total_cost = cost_per * amount
         if getattr(profile, resource_name) < total_cost:
             raise ValueError(f"Not enough {resource_name}. Need {total_cost}.")
 
-        banner = BANNERS.get(banner_key, BANNERS["standard"])
-        pool = self._build_banner_pool(banner["featured_tag"])
+        pool = self._build_summon_pool(summon_type)
         obtained: list[OwnedCharacter] = []
-        pity_counter = profile.pity_counter
 
         for _ in range(amount):
-            pity_counter += 1
-            chosen = self._roll_character(pool, pity_counter)
+            chosen = self._roll_character(pool)
             instance_id = await self.add_character(player_id, chosen.key)
-            if chosen.rarity == "Special Grade":
-                pity_counter = 0
             owned = await self.get_character_instance(player_id, instance_id)
             if owned:
                 obtained.append(owned)
@@ -244,13 +244,11 @@ class GameService:
         await self.db.execute(
             f"""
             UPDATE players
-            SET {resource_name} = {resource_name} - $2,
-                pity_counter = $3
+            SET {resource_name} = {resource_name} - $2
             WHERE id = $1
             """,
             player_id,
             total_cost,
-            pity_counter,
         )
         return obtained, await self.get_profile_by_player_id(player_id)
 
@@ -458,7 +456,7 @@ class GameService:
         elif action == "awaken":
             if character.awakened:
                 raise ValueError("This sorcerer already awakened.")
-            if character.definition.rarity != "Special Grade":
+            if "special grade" not in character.definition.grade.lower():
                 raise ValueError("Only Special Grade units can awaken.")
             if character.level < 50 or character.grade < 3:
                 raise ValueError("Awakening needs level 50 and grade 3.")
@@ -535,6 +533,7 @@ class GameService:
             title=row["title"],
             rarity=row["rarity"],
             grade=row["grade_label"],
+            image_url=row["image_url"],
             base_hp=row["base_hp"],
             base_attack=row["base_attack"],
             base_defense=row["base_defense"],
@@ -562,30 +561,34 @@ class GameService:
             definition=definition,
         )
 
-    def _build_banner_pool(self, featured_tag: str) -> list[tuple[CharacterDefinition, int]]:
-        pool: list[tuple[CharacterDefinition, int]] = []
-        for character in CHARACTERS:
-            if "boss" in character.banner_tags:
+    def _build_summon_pool(self, summon_type: str) -> list[tuple[CharacterDefinition, float]]:
+        summon_data = SUMMON_TYPES[summon_type]
+        pool: list[tuple[CharacterDefinition, float]] = []
+        for grade_name, chance in summon_data["rates"].items():
+            grade_chars = [
+                character
+                for character in CHARACTERS
+                if "boss" not in character.banner_tags and self._matches_grade_bucket(character.grade, grade_name)
+            ]
+            if not grade_chars:
                 continue
-            weight = character.drop_weight
-            if featured_tag in character.banner_tags and featured_tag != "standard":
-                weight = int(weight * 2.2)
-            pool.append((character, weight))
+            total_weight = sum(character.drop_weight for character in grade_chars)
+            for character in grade_chars:
+                scaled_weight = chance * (character.drop_weight / total_weight)
+                pool.append((character, scaled_weight))
         return pool
 
-    def _roll_character(
-        self, pool: list[tuple[CharacterDefinition, int]], pity_counter: int
-    ) -> CharacterDefinition:
-        if pity_counter >= self.settings.summon_pity_threshold:
-            special_pool = [entry for entry in pool if entry[0].rarity == "Special Grade"]
-            return random.choices(
-                [character for character, _ in special_pool],
-                weights=[weight for _, weight in special_pool],
-                k=1,
-            )[0]
-
+    def _roll_character(self, pool: list[tuple[CharacterDefinition, float]]) -> CharacterDefinition:
         return random.choices(
             [character for character, _ in pool],
             weights=[weight for _, weight in pool],
             k=1,
         )[0]
+
+    def _matches_grade_bucket(self, character_grade: str, target_grade: str) -> bool:
+        normalized = character_grade.lower()
+        if target_grade == "Grade 1":
+            return "grade 1" in normalized or "semi-grade 1" in normalized
+        if target_grade == "Special Grade":
+            return "special grade" in normalized
+        return target_grade.lower() in normalized

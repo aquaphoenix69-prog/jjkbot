@@ -200,7 +200,7 @@ class BattleService:
         bonus = 1.5 if critical else 1.0
         extra = " Critical hit." if critical else ""
 
-        if fighter.energy >= 140 and (fighter.awakened or fighter.definition.rarity == "Special Grade") and not fighter.domain_used:
+        if fighter.energy >= 140 and (fighter.awakened or "special grade" in fighter.definition.grade.lower()) and not fighter.domain_used:
             fighter.energy -= 140
             fighter.domain_used = True
             damage = int(base_damage * (2.1 + fighter.skill_level * 0.08) * bonus)

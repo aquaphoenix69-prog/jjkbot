@@ -3,6 +3,7 @@ from __future__ import annotations
 import discord
 from discord.ext import commands
 
+from bot.data.characters import SUMMON_TYPES
 from bot.utils.embeds import (
     daily_embed,
     inventory_page_embed,
@@ -38,13 +39,37 @@ class InventoryView(discord.ui.View):
         await interaction.response.edit_message(embed=self.embeds[self.index], view=self)
 
 
+class SummonResultView(discord.ui.View):
+    def __init__(self, owner_id: int, embeds: list[discord.Embed]) -> None:
+        super().__init__(timeout=120)
+        self.owner_id = owner_id
+        self.embeds = embeds
+        self.index = 0
+
+    async def interaction_check(self, interaction: discord.Interaction) -> bool:
+        if interaction.user.id != self.owner_id:
+            await interaction.response.send_message("Only the summoner can use these buttons.", ephemeral=True)
+            return False
+        return True
+
+    @discord.ui.button(label="Previous Result", style=discord.ButtonStyle.secondary)
+    async def previous(self, interaction: discord.Interaction, _: discord.ui.Button) -> None:
+        self.index = (self.index - 1) % len(self.embeds)
+        await interaction.response.edit_message(embed=self.embeds[self.index], view=self)
+
+    @discord.ui.button(label="Next Result", style=discord.ButtonStyle.primary)
+    async def next(self, interaction: discord.Interaction, _: discord.ui.Button) -> None:
+        self.index = (self.index + 1) % len(self.embeds)
+        await interaction.response.edit_message(embed=self.embeds[self.index], view=self)
+
+
 class GameCog(commands.Cog):
     def __init__(self, bot: commands.Bot) -> None:
         self.bot = bot
         self.help_categories = {
             "profile": {
                 "description": "Account setup, progression overview, streaks, and ranking.",
-                "commands": ["start", "profile", "daily", "leaderboard"],
+                "commands": ["start", "profile", "daily", "leaderboard", "ping"],
             },
             "game": {
                 "description": "Collection management, summoning, teams, and upgrades.",
@@ -80,7 +105,7 @@ class GameCog(commands.Cog):
             for name, data in self.help_categories.items():
                 embed.add_field(
                     name=name.title(),
-                    value=f"{data['description']}\nCommands: {', '.join(f'`y!{cmd}`' for cmd in data['commands'])}",
+                    value=data["description"],
                     inline=False,
                 )
             await ctx.send(embed=embed)
@@ -127,6 +152,19 @@ class GameCog(commands.Cog):
         await ctx.send("No help entry found for that category or command.")
 
     @commands.command(
+        help="Check whether the bot is alive and how fast it is responding.",
+        extras={
+            "category": "profile",
+            "usage": "y!ping",
+            "examples": ["y!ping"],
+            "details": "Replies with Pong and shows the current websocket latency in milliseconds so you can verify the bot is online.",
+        },
+    )
+    async def ping(self, ctx: commands.Context) -> None:
+        latency_ms = round(self.bot.latency * 1000)
+        await ctx.send(f"Pong! `{latency_ms}ms`")
+
+    @commands.command(
         help="Create your JJK profile and receive your starter unit.",
         extras={
             "category": "profile",
@@ -141,7 +179,7 @@ class GameCog(commands.Cog):
         await ctx.send(embed=profile_embed(ctx.author, profile))
 
     @commands.command(
-        help="View your resources, stamina, pity count, materials, and rank.",
+        help="View your resources, stamina, materials, and rank.",
         extras={
             "category": "profile",
             "usage": "y!profile",
@@ -158,49 +196,61 @@ class GameCog(commands.Cog):
         await ctx.send(embed=profile_embed(ctx.author, profile))
 
     @commands.command(
-        help="Summon characters from a banner using crystals or coins.",
+        help="Summon characters with normal, rare, epic, or legendary rituals.",
         extras={
             "category": "game",
-            "usage": "y!summon [banner=standard] [amount=1] [currency=crystals]",
-            "examples": ["y!summon", "y!summon gojo 10 crystals", "y!summon yuji 1 coins"],
-            "details": "Available banners are standard, gojo, sukuna, and yuji. Amount should be 1 or 10. Currency can be `crystals` or `coins`.",
+            "usage": "y!summon <normal|rare|epic|legendary> [1|n-x]",
+            "examples": ["y!summon normal", "y!summon rare n-3", "y!summon legendary n-10"],
+            "details": "Summon cost is paid in coins. Costs are normal 100, rare 2000, epic 100000, legendary 500000. Use `n-x` to multi-summon x times.",
         },
     )
     @commands.cooldown(1, 5.0, commands.BucketType.user)
     async def summon(
         self,
         ctx: commands.Context,
-        banner: str = "standard",
-        amount: int = 1,
-        currency: str = "crystals",
+        summon_type: str = "normal",
+        amount_token: str = "1",
     ) -> None:
         profile = await self.bot.game.get_profile(ctx.author.id)
         if not profile:
             await ctx.send("Use `y!start` first.")
             return
-        banner = banner.lower()
-        currency = currency.lower()
-        if banner not in {"standard", "gojo", "sukuna", "yuji"}:
-            await ctx.send("Unknown banner. Use `standard`, `gojo`, `sukuna`, or `yuji`.")
+        summon_type = summon_type.lower()
+        if summon_type not in SUMMON_TYPES:
+            await ctx.send("Unknown summon type. Use `normal`, `rare`, `epic`, or `legendary`.")
             return
-        if amount not in {1, 10}:
-            await ctx.send("Amount must be `1` or `10`.")
-            return
-        if currency not in {"crystals", "coins"}:
-            await ctx.send("Currency must be `crystals` or `coins`.")
+        amount = self._parse_summon_amount(amount_token)
+        if amount is None or amount < 1:
+            await ctx.send("Amount must be `1` or in `n-x` format like `n-10`.")
             return
 
         try:
             recruits, updated = await self.bot.game.summon(
                 profile.player_id,
-                banner,
+                summon_type,
                 amount,
-                use_crystals=currency == "crystals",
             )
         except ValueError as exc:
             await ctx.send(str(exc))
             return
-        await ctx.send(embed=summon_embed(ctx.author, banner, recruits, updated))
+        embeds = [
+            summon_embed(ctx.author, summon_type, recruit, updated, amount)
+            for recruit in recruits
+        ]
+        if not embeds:
+            await ctx.send("No characters were summoned.")
+            return
+        await ctx.send(embed=embeds[0], view=SummonResultView(ctx.author.id, embeds))
+
+    def _parse_summon_amount(self, raw: str) -> int | None:
+        normalized = raw.lower().strip()
+        if normalized.isdigit():
+            return int(normalized)
+        if normalized.startswith("n-"):
+            tail = normalized[2:]
+            if tail.isdigit():
+                return int(tail)
+        return None
 
     @commands.command(
         help="Browse every character you own.",

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import discord
 
-from bot.data.characters import BANNERS
+from bot.data.characters import SUMMON_TYPES
 from bot.models.game import BattleLog, OwnedCharacter, PlayerProfile
 
 
@@ -13,11 +13,10 @@ def profile_embed(user: discord.abc.User, profile: PlayerProfile) -> discord.Emb
         description="Your current progression across Tokyo Jujutsu High.",
     )
     embed.add_field(name="Coins", value=f"{profile.coins:,}", inline=True)
-    embed.add_field(name="Crystals", value=f"{profile.crystals:,}", inline=True)
     embed.add_field(name="Stamina", value=f"{profile.stamina}/{profile.max_stamina}", inline=True)
-    embed.add_field(name="Pity", value=f"{profile.pity_counter}/30", inline=True)
     embed.add_field(name="Daily Streak", value=str(profile.daily_streak), inline=True)
     embed.add_field(name="Rank Points", value=str(profile.rank_points), inline=True)
+    embed.add_field(name="Crystals", value=f"{profile.crystals:,}", inline=True)
     embed.add_field(
         name="Materials",
         value=(
@@ -33,25 +32,39 @@ def profile_embed(user: discord.abc.User, profile: PlayerProfile) -> discord.Emb
 
 def summon_embed(
     user: discord.abc.User,
-    banner_key: str,
-    characters: list[OwnedCharacter],
+    summon_type: str,
+    character: OwnedCharacter,
     profile: PlayerProfile,
+    amount: int,
 ) -> discord.Embed:
-    banner = BANNERS[banner_key]
+    summon_data = SUMMON_TYPES[summon_type]
     embed = discord.Embed(
-        title=f"{user.display_name} opened {banner['name']}",
-        color=discord.Color.gold(),
-        description=banner["description"],
+        title=f"{user.display_name} used {summon_data['name']}",
+        color=discord.Color(summon_data["color"]),
+        description=summon_data["description"],
     )
-    lines = []
-    for owned in characters:
-        awakened = " | Domain Ready" if owned.awakened else ""
-        lines.append(
-            f"`#{owned.instance_id}` {owned.definition.name} [{owned.definition.rarity}]"
-            f" | {owned.definition.basic_skill}{awakened}"
-        )
-    embed.add_field(name="Recruits", value="\n".join(lines), inline=False)
-    embed.set_footer(text=f"Remaining pity: {profile.pity_counter}/30")
+    embed.add_field(
+        name="Result",
+        value=(
+            f"`#{character.instance_id}` {character.definition.name}\n"
+            f"Rarity: {character.definition.rarity}\n"
+            f"Sorcerer Grade: {character.definition.grade}\n"
+            f"Basic Skill: {character.definition.basic_skill}\n"
+            f"Ultimate: {character.definition.ultimate_skill}"
+        ),
+        inline=False,
+    )
+    embed.add_field(name="Quote", value=character.definition.quote, inline=False)
+    embed.add_field(
+        name="Wallet",
+        value=(
+            f"Spent: {SUMMON_TYPES[summon_type]['cost'] * amount:,} Coins\n"
+            f"Remaining Coins: {profile.coins:,}"
+        ),
+        inline=False,
+    )
+    if character.definition.image_url:
+        embed.set_image(url=character.definition.image_url)
     return embed
 
 
@@ -69,7 +82,7 @@ def inventory_page_embed(
     embed = discord.Embed(
         title=f"{user.display_name}'s JJK Collection",
         color=discord.Color.blurple(),
-        description="Instance ids are used for `/team`, `/upgrade`, and `/lock`.",
+        description="Instance ids are used for `y!team`, `y!upgrade`, and `y!lock`.",
     )
     if not page_items:
         embed.add_field(name="Collection", value="No characters collected yet.", inline=False)
@@ -84,9 +97,11 @@ def inventory_page_embed(
             suffix = f" ({', '.join(flags)})" if flags else ""
             lines.append(
                 f"`#{owned.instance_id}` {owned.definition.name} [{owned.definition.rarity}]"
-                f" Lv.{owned.level} G{owned.grade} S{owned.skill_level}{suffix}"
+                f" | {owned.definition.grade} | Lv.{owned.level} G{owned.grade} S{owned.skill_level}{suffix}"
             )
         embed.add_field(name="Sorcerers", value="\n".join(lines), inline=False)
+        if page_items[0].definition.image_url:
+            embed.set_thumbnail(url=page_items[0].definition.image_url)
     embed.set_footer(text=f"Page {page + 1}/{total_pages}")
     return embed
 
@@ -105,10 +120,13 @@ def team_embed(user: discord.abc.User, team: list[OwnedCharacter]) -> discord.Em
             value=(
                 f"`#{owned.instance_id}` {owned.definition.name}\n"
                 f"{owned.definition.title}\n"
+                f"Lore Grade: {owned.definition.grade}\n"
                 f"Lv.{owned.level} | Grade {owned.grade} | Skill {owned.skill_level}"
             ),
             inline=False,
         )
+    if team[0].definition.image_url:
+        embed.set_thumbnail(url=team[0].definition.image_url)
     return embed
 
 

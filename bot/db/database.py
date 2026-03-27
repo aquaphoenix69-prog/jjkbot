@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
+import re
 from typing import Any
 
 import aiosqlite
@@ -17,6 +18,7 @@ CREATE TABLE IF NOT EXISTS character_catalog (
     title TEXT NOT NULL,
     rarity TEXT NOT NULL,
     grade_label TEXT NOT NULL,
+    image_url TEXT NOT NULL,
     base_hp INTEGER NOT NULL,
     base_attack INTEGER NOT NULL,
     base_defense INTEGER NOT NULL,
@@ -88,6 +90,7 @@ CREATE TABLE IF NOT EXISTS character_catalog (
     title TEXT NOT NULL,
     rarity TEXT NOT NULL,
     grade_label TEXT NOT NULL,
+    image_url TEXT NOT NULL,
     base_hp INTEGER NOT NULL,
     base_attack INTEGER NOT NULL,
     base_defense INTEGER NOT NULL,
@@ -283,14 +286,16 @@ class Database:
         async with aiosqlite.connect(self.sqlite_path) as conn:  # type: ignore[arg-type]
             conn.row_factory = aiosqlite.Row
             await conn.execute("PRAGMA foreign_keys = ON")
-            await conn.execute(self._convert_sqlite_query(query), args)
+            sql, ordered_args = self._prepare_sqlite_query(query, args)
+            await conn.execute(sql, ordered_args)
             await conn.commit()
 
     async def _sqlite_fetch(self, query: str, args: tuple[Any, ...]) -> list[aiosqlite.Row]:
         async with aiosqlite.connect(self.sqlite_path) as conn:  # type: ignore[arg-type]
             conn.row_factory = aiosqlite.Row
             await conn.execute("PRAGMA foreign_keys = ON")
-            cursor = await conn.execute(self._convert_sqlite_query(query), args)
+            sql, ordered_args = self._prepare_sqlite_query(query, args)
+            cursor = await conn.execute(sql, ordered_args)
             if self._is_mutating_query(query):
                 await conn.commit()
             return await cursor.fetchall()
@@ -299,17 +304,18 @@ class Database:
         async with aiosqlite.connect(self.sqlite_path) as conn:  # type: ignore[arg-type]
             conn.row_factory = aiosqlite.Row
             await conn.execute("PRAGMA foreign_keys = ON")
-            cursor = await conn.execute(self._convert_sqlite_query(query), args)
+            sql, ordered_args = self._prepare_sqlite_query(query, args)
+            cursor = await conn.execute(sql, ordered_args)
             row = await cursor.fetchone()
             if self._is_mutating_query(query):
                 await conn.commit()
             return row
 
-    def _convert_sqlite_query(self, query: str) -> str:
-        converted = query
-        for index in range(30, 0, -1):
-            converted = converted.replace(f"${index}", "?")
-        return converted
+    def _prepare_sqlite_query(self, query: str, args: tuple[Any, ...]) -> tuple[str, tuple[Any, ...]]:
+        indexes = [int(match.group(1)) for match in re.finditer(r"\$(\d+)", query)]
+        converted = re.sub(r"\$(\d+)", "?", query)
+        ordered_args = tuple(args[index - 1] for index in indexes)
+        return converted, ordered_args
 
     def _is_mutating_query(self, query: str) -> bool:
         normalized = query.lstrip().upper()

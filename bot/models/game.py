@@ -11,6 +11,7 @@ class CharacterDefinition:
     title: str
     rarity: str
     grade: str
+    image_url: str
     base_hp: int
     base_attack: int
     base_defense: int
