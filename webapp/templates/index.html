@@ -1,0 +1,101 @@
+{% extends "base.html" %}
+
+{% block title %}Yutafraud Dashboard{% endblock %}
+
+{% block content %}
+<main class="dashboard-grid">
+    <section class="hero-panel">
+        <div class="hero-copy">
+            <p class="eyebrow">Tokyo Jujutsu High Records</p>
+            <h2>The Yutafraud control room for coins, ranks, teams, and cursed grind.</h2>
+            <p class="hero-text">
+                Track every sorcerer profile, watch the richest players climb, and jump straight into any user panel with their Discord ID.
+            </p>
+            <form class="lookup-form" action="/lookup" method="get">
+                <label for="user_id">Open a profile panel</label>
+                <div class="lookup-row">
+                    <input id="user_id" name="user_id" type="number" placeholder="Discord user ID" required>
+                    <button type="submit">Open Profile</button>
+                </div>
+            </form>
+            <div class="hero-stats">
+                <article>
+                    <span>Registered Players</span>
+                    <strong>{{ player_count }}</strong>
+                </article>
+                <article>
+                    <span>Total Cards</span>
+                    <strong>{{ collection_count }}</strong>
+                </article>
+            </div>
+        </div>
+        <div class="hero-visual">
+            <img src="{{ cat_gif }}" alt="Welcome cat gif">
+            <div class="hero-badge">welcome to yutafraud</div>
+        </div>
+    </section>
+
+    {% if spotlight %}
+    <section class="spotlight-panel">
+        <p class="eyebrow">Featured Sorcerer</p>
+        <div class="spotlight-card">
+            <img class="avatar" src="{{ spotlight.identity.avatar_url }}" alt="{{ spotlight.identity.display_name }}">
+            <div>
+                <h3>{{ spotlight.identity.display_name }}</h3>
+                <p>@{{ spotlight.identity.username }}</p>
+                <p>Currently leading the rank board with <strong>{{ "{:,}".format(spotlight.value) }}</strong> RP.</p>
+                <a class="ghost-link" href="/profiles/{{ spotlight.identity.user_id }}">Open profile</a>
+            </div>
+        </div>
+    </section>
+    {% endif %}
+
+    <section class="panel full-width" id="leaderboards">
+        <div class="section-heading">
+            <p class="eyebrow">Leaderboards</p>
+            <h3>Every important stat in one place</h3>
+        </div>
+        <div class="boards-grid">
+            {% for key, board in boards.items() %}
+            <article class="board-card">
+                <div class="board-header">
+                    <h4>{{ board.title }}</h4>
+                    <span>{{ board.label }}</span>
+                </div>
+                <ol>
+                    {% for entry in board.entries %}
+                    <li>
+                        <a href="/profiles/{{ entry.identity.user_id }}">
+                            <img class="mini-avatar" src="{{ entry.identity.avatar_url }}" alt="{{ entry.identity.display_name }}">
+                            <div>
+                                <strong>{{ entry.identity.display_name }}</strong>
+                                <span>@{{ entry.identity.username }}</span>
+                            </div>
+                            <b>{{ "{:,}".format(entry.value) }}</b>
+                        </a>
+                    </li>
+                    {% else %}
+                    <li class="empty-row">No players yet.</li>
+                    {% endfor %}
+                </ol>
+            </article>
+            {% endfor %}
+        </div>
+    </section>
+
+    <section class="panel" id="settings">
+        <div class="section-heading">
+            <p class="eyebrow">Game Settings</p>
+            <h3>Core Yutafraud bot values</h3>
+        </div>
+        <div class="settings-grid">
+            {% for setting in game_settings %}
+            <article class="setting-card">
+                <span>{{ setting.name }}</span>
+                <strong>{{ setting.value }}</strong>
+            </article>
+            {% endfor %}
+        </div>
+    </section>
+</main>
+{% endblock %}

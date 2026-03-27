@@ -36,6 +36,7 @@ def summon_embed(
     character: OwnedCharacter,
     profile: PlayerProfile,
     amount: int,
+    image_name: str | None = None,
 ) -> discord.Embed:
     summon_data = SUMMON_TYPES[summon_type]
     embed = discord.Embed(
@@ -63,7 +64,9 @@ def summon_embed(
         ),
         inline=False,
     )
-    if character.definition.image_url:
+    if image_name:
+        embed.set_image(url=f"attachment://{image_name}")
+    elif character.definition.image_url:
         embed.set_image(url=character.definition.image_url)
     return embed
 
@@ -181,12 +184,18 @@ def upgrade_embed(character: OwnedCharacter, action: str) -> discord.Embed:
     return embed
 
 
-def leaderboard_embed(entries: list[tuple[str, int]]) -> discord.Embed:
+def leaderboard_embed(
+    stat_title: str,
+    stat_label: str,
+    entries: list[tuple[str, int]],
+    available_stats: list[str],
+) -> discord.Embed:
     embed = discord.Embed(
-        title="Jujutsu Ranked Leaderboard",
+        title=f"Jujutsu {stat_title} Leaderboard",
         color=discord.Color.brand_green(),
     )
     embed.description = "\n".join(
-        f"**#{index}** {name} - {points} RP" for index, (name, points) in enumerate(entries, start=1)
-    ) or "No ranked players yet."
+        f"**#{index}** {name} - {value:,} {stat_label}" for index, (name, value) in enumerate(entries, start=1)
+    ) or "No players on this board yet."
+    embed.set_footer(text=f"Categories: {', '.join(available_stats)}")
     return embed

@@ -10,6 +10,39 @@ from bot.models.game import CharacterDefinition, OwnedCharacter, PlayerProfile
 
 
 class GameService:
+    LEADERBOARD_STATS: dict[str, dict[str, str]] = {
+        "rank": {
+            "column": "rank_points",
+            "label": "RP",
+            "title": "Rank Points",
+        },
+        "coins": {
+            "column": "coins",
+            "label": "Coins",
+            "title": "Coins",
+        },
+        "crystals": {
+            "column": "crystals",
+            "label": "Crystals",
+            "title": "Crystals",
+        },
+        "streak": {
+            "column": "daily_streak",
+            "label": "Days",
+            "title": "Daily Streak",
+        },
+        "story": {
+            "column": "story_stage",
+            "label": "Stage",
+            "title": "Story Stage",
+        },
+        "collection": {
+            "column": "collection",
+            "label": "Units",
+            "title": "Collection Size",
+        },
+    }
+
     def __init__(self, db: Database) -> None:
         self.db = db
         self.settings = get_settings()
@@ -355,6 +388,65 @@ class GameService:
         )
         return await self.get_profile_by_player_id(player_id)
 
+    async def admin_grant_resources(
+        self,
+        player_id: int,
+        *,
+        coins: int = 0,
+        crystals: int = 0,
+        stamina: int = 0,
+        training_scrolls: int = 0,
+        skill_scrolls: int = 0,
+        grade_seals: int = 0,
+        rank_points: int = 0,
+    ) -> PlayerProfile:
+        profile = await self.get_profile_by_player_id(player_id)
+        new_stamina = max(0, min(profile.max_stamina, profile.stamina + stamina))
+        await self.db.execute(
+            """
+            UPDATE players
+            SET coins = coins + $2,
+                crystals = crystals + $3,
+                stamina = $4,
+                training_scrolls = training_scrolls + $5,
+                skill_scrolls = skill_scrolls + $6,
+                grade_seals = grade_seals + $7,
+                rank_points = rank_points + $8
+            WHERE id = $1
+            """,
+            player_id,
+            coins,
+            crystals,
+            new_stamina,
+            training_scrolls,
+            skill_scrolls,
+            grade_seals,
+            rank_points,
+        )
+        return await self.get_profile_by_player_id(player_id)
+
+    async def admin_add_character_copies(
+        self, player_id: int, character_key: str, amount: int
+    ) -> list[OwnedCharacter]:
+        if character_key not in self.character_map:
+            raise ValueError("Unknown character key.")
+        granted: list[OwnedCharacter] = []
+        for _ in range(amount):
+            instance_id = await self.add_character(player_id, character_key)
+            owned = await self.get_character_instance(player_id, instance_id)
+            if owned:
+                granted.append(owned)
+        return granted
+
+    async def admin_reset_profile(self, player_id: int) -> None:
+        await self.db.executemany(
+            [
+                ("DELETE FROM teams WHERE player_id = $1", (player_id,)),
+                ("DELETE FROM player_characters WHERE player_id = $1", (player_id,)),
+                ("DELETE FROM players WHERE id = $1", (player_id,)),
+            ]
+        )
+
     async def update_rank_points(self, player_id: int, delta: int) -> None:
         if self.db.is_sqlite:
             profile = await self.get_profile_by_player_id(player_id)
@@ -386,12 +478,33 @@ class GameService:
             winner_id,
         )
 
-    async def get_leaderboard(self, limit: int = 10) -> list[tuple[int, int]]:
-        rows = await self.db.fetch(
-            "SELECT user_id, rank_points FROM players ORDER BY rank_points DESC LIMIT $1",
-            limit,
-        )
-        return [(row["user_id"], row["rank_points"]) for row in rows]
+    async def get_leaderboard(self, stat: str = "rank", limit: int = 10) -> tuple[str, str, list[tuple[int, int]]]:
+        normalized = stat.lower().strip()
+        if normalized not in self.LEADERBOARD_STATS:
+            raise ValueError("Unknown leaderboard stat.")
+
+        stat_data = self.LEADERBOARD_STATS[normalized]
+        if normalized == "collection":
+            rows = await self.db.fetch(
+                """
+                SELECT p.user_id, COUNT(pc.id) AS value
+                FROM players p
+                LEFT JOIN player_characters pc ON pc.player_id = p.id
+                GROUP BY p.id, p.user_id
+                ORDER BY value DESC, p.user_id ASC
+                LIMIT $1
+                """,
+                limit,
+            )
+        else:
+            column = stat_data["column"]
+            rows = await self.db.fetch(
+                f"SELECT user_id, {column} AS value FROM players ORDER BY {column} DESC, user_id ASC LIMIT $1",
+                limit,
+            )
+
+        entries = [(row["user_id"], int(row["value"])) for row in rows]
+        return stat_data["title"], stat_data["label"], entries
 
     async def upgrade_character(self, player_id: int, instance_id: int, action: str) -> OwnedCharacter:
         profile = await self.get_profile_by_player_id(player_id)

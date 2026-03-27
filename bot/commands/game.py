@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+import io
+
+import aiohttp
 import discord
 from discord.ext import commands
 
@@ -40,10 +43,14 @@ class InventoryView(discord.ui.View):
 
 
 class SummonResultView(discord.ui.View):
-    def __init__(self, owner_id: int, embeds: list[discord.Embed]) -> None:
+    def __init__(
+        self,
+        owner_id: int,
+        entries: list[tuple[discord.Embed, bytes | None, str | None]],
+    ) -> None:
         super().__init__(timeout=120)
         self.owner_id = owner_id
-        self.embeds = embeds
+        self.entries = entries
         self.index = 0
 
     async def interaction_check(self, interaction: discord.Interaction) -> bool:
@@ -54,18 +61,26 @@ class SummonResultView(discord.ui.View):
 
     @discord.ui.button(label="Previous Result", style=discord.ButtonStyle.secondary)
     async def previous(self, interaction: discord.Interaction, _: discord.ui.Button) -> None:
-        self.index = (self.index - 1) % len(self.embeds)
-        await interaction.response.edit_message(embed=self.embeds[self.index], view=self)
+        self.index = (self.index - 1) % len(self.entries)
+        await self._edit(interaction)
 
     @discord.ui.button(label="Next Result", style=discord.ButtonStyle.primary)
     async def next(self, interaction: discord.Interaction, _: discord.ui.Button) -> None:
-        self.index = (self.index + 1) % len(self.embeds)
-        await interaction.response.edit_message(embed=self.embeds[self.index], view=self)
+        self.index = (self.index + 1) % len(self.entries)
+        await self._edit(interaction)
+
+    async def _edit(self, interaction: discord.Interaction) -> None:
+        embed, image_bytes, image_name = self.entries[self.index]
+        attachments = []
+        if image_bytes and image_name:
+            attachments = [discord.File(io.BytesIO(image_bytes), filename=image_name)]
+        await interaction.response.edit_message(embed=embed, attachments=attachments, view=self)
 
 
 class GameCog(commands.Cog):
     def __init__(self, bot: commands.Bot) -> None:
         self.bot = bot
+        self.admin_usernames = {"__gloom", "_nez_24", "frustated_fungus"}
         self.help_categories = {
             "profile": {
                 "description": "Account setup, progression overview, streaks, and ranking.",
@@ -74,6 +89,10 @@ class GameCog(commands.Cog):
             "game": {
                 "description": "Collection management, summoning, teams, and upgrades.",
                 "commands": ["summon", "inventory", "team", "lock", "upgrade"],
+            },
+            "admin": {
+                "description": "Owner-only economy and inventory controls.",
+                "commands": ["admincoins", "admincrystals", "adminmaterials", "admincard", "adminreset"],
             },
             "battle": {
                 "description": "PvE fights, boss raids, and PvP challenges.",
@@ -233,14 +252,22 @@ class GameCog(commands.Cog):
         except ValueError as exc:
             await ctx.send(str(exc))
             return
-        embeds = [
-            summon_embed(ctx.author, summon_type, recruit, updated, amount)
+        entries = [
+            await self._build_summon_entry(ctx.author, summon_type, recruit, updated, amount)
             for recruit in recruits
         ]
-        if not embeds:
+        if not entries:
             await ctx.send("No characters were summoned.")
             return
-        await ctx.send(embed=embeds[0], view=SummonResultView(ctx.author.id, embeds))
+        first_embed, first_bytes, first_name = entries[0]
+        first_file = None
+        if first_bytes and first_name:
+            first_file = discord.File(io.BytesIO(first_bytes), filename=first_name)
+        await ctx.send(
+            embed=first_embed,
+            file=first_file,
+            view=SummonResultView(ctx.author.id, entries),
+        )
 
     def _parse_summon_amount(self, raw: str) -> int | None:
         normalized = raw.lower().strip()
@@ -251,6 +278,64 @@ class GameCog(commands.Cog):
             if tail.isdigit():
                 return int(tail)
         return None
+
+    async def _build_summon_entry(
+        self,
+        user: discord.abc.User,
+        summon_type: str,
+        recruit,
+        profile,
+        amount: int,
+    ) -> tuple[discord.Embed, bytes | None, str | None]:
+        image_bytes, image_name = await self._download_character_image(recruit.definition)
+        embed = summon_embed(
+            user,
+            summon_type,
+            recruit,
+            profile,
+            amount,
+            image_name=image_name if image_bytes else None,
+        )
+        return embed, image_bytes, image_name if image_bytes else None
+
+    async def _download_character_image(
+        self, definition
+    ) -> tuple[bytes | None, str | None]:
+        if not definition.image_url:
+            return None, None
+        try:
+            timeout = aiohttp.ClientTimeout(total=10)
+            headers = {
+                "User-Agent": (
+                    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+                    "AppleWebKit/537.36 (KHTML, like Gecko) "
+                    "Chrome/124.0.0.0 Safari/537.36"
+                )
+            }
+            async with aiohttp.ClientSession(timeout=timeout, headers=headers) as session:
+                async with session.get(definition.image_url, allow_redirects=True) as response:
+                    if response.status != 200:
+                        return None, None
+                    data = await response.read()
+            safe_name = f"{definition.key}.png"
+            return data, safe_name
+        except Exception:
+            return None, None
+
+    def _is_admin(self, user: discord.abc.User) -> bool:
+        return user.name.lower() in self.admin_usernames
+
+    async def _require_admin(self, ctx: commands.Context) -> bool:
+        if self._is_admin(ctx.author):
+            return True
+        await ctx.send("You are not allowed to use admin commands.")
+        return False
+
+    async def _get_or_create_target_profile(self, member: discord.Member):
+        profile = await self.bot.game.get_profile(member.id)
+        if profile:
+            return profile
+        return await self.bot.game.create_profile(member.id)
 
     @commands.command(
         help="Browse every character you own.",
@@ -376,27 +461,155 @@ class GameCog(commands.Cog):
         await ctx.send(embed=upgrade_embed(character, action))
 
     @commands.command(
-        help="Show the top ranked sorcerers.",
+        help="Show leaderboard categories like coins, crystals, rank, streak, story, or collection.",
         extras={
             "category": "profile",
-            "usage": "y!leaderboard",
-            "examples": ["y!leaderboard"],
-            "details": "Displays the current rank point leaderboard using stored PvP progression.",
+            "usage": "y!leaderboard [rank|coins|crystals|streak|story|collection]",
+            "examples": ["y!leaderboard", "y!leaderboard coins", "y!leaderboard collection"],
+            "details": "Displays a leaderboard for the requested stat. Available boards are rank points, coins, crystals, daily streak, story progress, and collection size.",
         },
     )
     @commands.cooldown(1, 5.0, commands.BucketType.user)
-    async def leaderboard(self, ctx: commands.Context) -> None:
-        entries = await self.bot.game.get_leaderboard()
+    async def leaderboard(self, ctx: commands.Context, stat: str = "rank") -> None:
+        try:
+            stat_title, stat_label, entries = await self.bot.game.get_leaderboard(stat)
+        except ValueError:
+            choices = ", ".join(self.bot.game.LEADERBOARD_STATS.keys())
+            await ctx.send(f"Unknown leaderboard category. Use one of: `{choices}`")
+            return
         resolved: list[tuple[str, int]] = []
-        for user_id, points in entries:
+        for user_id, value in entries:
             user = self.bot.get_user(user_id)
             if user is None:
                 try:
                     user = await self.bot.fetch_user(user_id)
                 except discord.HTTPException:
                     user = None
-            resolved.append((user.display_name if user else f"User {user_id}", points))
-        await ctx.send(embed=leaderboard_embed(resolved))
+            resolved.append((user.display_name if user else f"User {user_id}", value))
+        await ctx.send(
+            embed=leaderboard_embed(
+                stat_title,
+                stat_label,
+                resolved,
+                list(self.bot.game.LEADERBOARD_STATS.keys()),
+            )
+        )
+
+    @commands.command(
+        help="Admin only: add coins to your profile or another player's profile.",
+        extras={
+            "category": "admin",
+            "usage": "y!admincoins <@user> <amount>",
+            "examples": ["y!admincoins @digipompu 500000", "y!admincoins @friend 99999999"],
+            "details": "Adds any amount of coins to the target player's profile. Creates the profile automatically if needed.",
+        },
+    )
+    async def admincoins(self, ctx: commands.Context, target: discord.Member, amount: int) -> None:
+        if not await self._require_admin(ctx):
+            return
+        profile = await self._get_or_create_target_profile(target)
+        updated = await self.bot.game.admin_grant_resources(profile.player_id, coins=amount)
+        await ctx.send(f"Gave {amount:,} coins to {target.display_name}. New total: {updated.coins:,}.")
+
+    @commands.command(
+        help="Admin only: add crystals to a player.",
+        extras={
+            "category": "admin",
+            "usage": "y!admincrystals <@user> <amount>",
+            "examples": ["y!admincrystals @digipompu 5000"],
+            "details": "Adds any amount of crystals to the target player's profile.",
+        },
+    )
+    async def admincrystals(self, ctx: commands.Context, target: discord.Member, amount: int) -> None:
+        if not await self._require_admin(ctx):
+            return
+        profile = await self._get_or_create_target_profile(target)
+        updated = await self.bot.game.admin_grant_resources(profile.player_id, crystals=amount)
+        await ctx.send(f"Gave {amount:,} crystals to {target.display_name}. New total: {updated.crystals:,}.")
+
+    @commands.command(
+        help="Admin only: add materials and stamina to a player.",
+        extras={
+            "category": "admin",
+            "usage": "y!adminmaterials <@user> <training> <skill> <seals> [stamina=0]",
+            "examples": ["y!adminmaterials @digipompu 50 25 10 120"],
+            "details": "Adds training scrolls, skill scrolls, grade seals, and optional stamina to the target profile.",
+        },
+    )
+    async def adminmaterials(
+        self,
+        ctx: commands.Context,
+        target: discord.Member,
+        training: int,
+        skill: int,
+        seals: int,
+        stamina: int = 0,
+    ) -> None:
+        if not await self._require_admin(ctx):
+            return
+        profile = await self._get_or_create_target_profile(target)
+        updated = await self.bot.game.admin_grant_resources(
+            profile.player_id,
+            training_scrolls=training,
+            skill_scrolls=skill,
+            grade_seals=seals,
+            stamina=stamina,
+        )
+        await ctx.send(
+            f"Updated {target.display_name}: "
+            f"Training {updated.training_scrolls}, Skill {updated.skill_scrolls}, "
+            f"Seals {updated.grade_seals}, Stamina {updated.stamina}/{updated.max_stamina}."
+        )
+
+    @commands.command(
+        help="Admin only: grant character copies directly into a player's inventory.",
+        extras={
+            "category": "admin",
+            "usage": "y!admincard <@user> <character_key> [amount=1]",
+            "examples": ["y!admincard @digipompu gojo_six_eyes", "y!admincard @friend sukuna_king 5"],
+            "details": "Adds any character by key straight into the target inventory. Use keys from the source data like `yuji_student`, `gojo_six_eyes`, or `sukuna_king`.",
+        },
+    )
+    async def admincard(
+        self,
+        ctx: commands.Context,
+        target: discord.Member,
+        character_key: str,
+        amount: int = 1,
+    ) -> None:
+        if not await self._require_admin(ctx):
+            return
+        if amount < 1:
+            await ctx.send("Amount must be at least 1.")
+            return
+        profile = await self._get_or_create_target_profile(target)
+        try:
+            granted = await self.bot.game.admin_add_character_copies(profile.player_id, character_key, amount)
+        except ValueError as exc:
+            await ctx.send(str(exc))
+            return
+        await ctx.send(
+            f"Granted {len(granted)} copy/copies of `{character_key}` to {target.display_name}."
+        )
+
+    @commands.command(
+        help="Admin only: completely reset one player's save.",
+        extras={
+            "category": "admin",
+            "usage": "y!adminreset <@user>",
+            "examples": ["y!adminreset @digipompu"],
+            "details": "Deletes the target player's team, characters, and profile so they can start fresh.",
+        },
+    )
+    async def adminreset(self, ctx: commands.Context, target: discord.Member) -> None:
+        if not await self._require_admin(ctx):
+            return
+        profile = await self.bot.game.get_profile(target.id)
+        if not profile:
+            await ctx.send("That user does not have a profile yet.")
+            return
+        await self.bot.game.admin_reset_profile(profile.player_id)
+        await ctx.send(f"Reset {target.display_name}'s save data.")
 
     async def cog_command_error(self, ctx: commands.Context, error: commands.CommandError) -> None:
         if isinstance(error, commands.CommandOnCooldown):
