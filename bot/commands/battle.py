@@ -11,6 +11,7 @@ class BattleCog(commands.Cog):
         self.bot = bot
 
     @commands.command(
+        aliases=["bt", "fight", "raid"],
         help="Fight a story mission or a boss raid.",
         extras={
             "category": "battle",
@@ -45,6 +46,7 @@ class BattleCog(commands.Cog):
         await ctx.send(embed=battle_embed(title, log))
 
     @commands.command(
+        aliases=["duel", "challenge"],
         help="Challenge another player in ranked PvP.",
         extras={
             "category": "battle",

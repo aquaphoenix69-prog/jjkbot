@@ -106,6 +106,7 @@ class GameCog(commands.Cog):
 
     @commands.command(
         name="help",
+        aliases=["h", "commands", "cmds"],
         help="Show command categories, category-specific help, or full help for one command.",
         extras={
             "category": "help",
@@ -171,6 +172,7 @@ class GameCog(commands.Cog):
         await ctx.send("No help entry found for that category or command.")
 
     @commands.command(
+        aliases=["p"],
         help="Check whether the bot is alive and how fast it is responding.",
         extras={
             "category": "profile",
@@ -184,6 +186,7 @@ class GameCog(commands.Cog):
         await ctx.send(f"Pong! `{latency_ms}ms`")
 
     @commands.command(
+        aliases=["begin", "register"],
         help="Create your JJK profile and receive your starter unit.",
         extras={
             "category": "profile",
@@ -198,6 +201,7 @@ class GameCog(commands.Cog):
         await ctx.send(embed=profile_embed(ctx.author, profile))
 
     @commands.command(
+        aliases=["pf", "me", "stats"],
         help="View your resources, stamina, materials, and rank.",
         extras={
             "category": "profile",
@@ -215,12 +219,13 @@ class GameCog(commands.Cog):
         await ctx.send(embed=profile_embed(ctx.author, profile))
 
     @commands.command(
+        aliases=["sum", "pull", "roll"],
         help="Summon characters with normal, rare, epic, or legendary rituals.",
         extras={
             "category": "game",
-            "usage": "y!summon <normal|rare|epic|legendary> [1|n-x]",
-            "examples": ["y!summon normal", "y!summon rare n-3", "y!summon legendary n-10"],
-            "details": "Summon cost is paid in coins. Costs are normal 100, rare 2000, epic 100000, legendary 500000. Use `n-x` to multi-summon x times.",
+            "usage": "y!summon <normal|rare|epic|legendary> [1|n-x|all]",
+            "examples": ["y!summon normal", "y!summon rare n-3", "y!summon legendary n-10", "y!summon epic all"],
+            "details": "Summon cost is paid in coins. Costs are normal 100, rare 2000, epic 100000, legendary 500000. Use `n-x` to multi-summon x times, or `all` to spend all possible coins on that summon type.",
         },
     )
     @commands.cooldown(1, 5.0, commands.BucketType.user)
@@ -238,9 +243,9 @@ class GameCog(commands.Cog):
         if summon_type not in SUMMON_TYPES:
             await ctx.send("Unknown summon type. Use `normal`, `rare`, `epic`, or `legendary`.")
             return
-        amount = self._parse_summon_amount(amount_token)
+        amount = self._parse_summon_amount(amount_token, profile.coins, summon_type)
         if amount is None or amount < 1:
-            await ctx.send("Amount must be `1` or in `n-x` format like `n-10`.")
+            await ctx.send("Amount must be `1`, `all`, or in `n-x` format like `n-10`.")
             return
 
         try:
@@ -269,8 +274,11 @@ class GameCog(commands.Cog):
             view=SummonResultView(ctx.author.id, entries),
         )
 
-    def _parse_summon_amount(self, raw: str) -> int | None:
+    def _parse_summon_amount(self, raw: str, available_coins: int, summon_type: str) -> int | None:
         normalized = raw.lower().strip()
+        if normalized == "all":
+            cost = SUMMON_TYPES[summon_type]["cost"]
+            return available_coins // cost
         if normalized.isdigit():
             return int(normalized)
         if normalized.startswith("n-"):
@@ -338,6 +346,7 @@ class GameCog(commands.Cog):
         return await self.bot.game.create_profile(member.id)
 
     @commands.command(
+        aliases=["inv", "bag", "cards"],
         help="Browse every character you own.",
         extras={
             "category": "game",
@@ -360,19 +369,25 @@ class GameCog(commands.Cog):
         await ctx.send(embed=embeds[0], view=InventoryView(ctx.author.id, embeds))
 
     @commands.command(
+        aliases=["tm", "squad", "lineup"],
         help="Set your active three-character battle team.",
         extras={
             "category": "game",
-            "usage": "y!team <slot1> [slot2] [slot3]",
-            "examples": ["y!team 1 2 3", "y!team 7 9"],
-            "details": "Pass your character instance ids from `y!inventory`. Duplicate ids are not allowed.",
+            "usage": "y!team [slot1] [slot2] [slot3]",
+            "examples": ["y!team", "y!team 1 2 3", "y!team 7 9"],
+            "details": "With no ids it shows your current team. To update the lineup, pass your inventory instance ids from `y!inventory`. Duplicate ids are not allowed.",
         },
     )
     @commands.cooldown(1, 4.0, commands.BucketType.user)
-    async def team(self, ctx: commands.Context, slot1: int, slot2: int | None = None, slot3: int | None = None) -> None:
+    async def team(self, ctx: commands.Context, slot1: int | None = None, slot2: int | None = None, slot3: int | None = None) -> None:
         profile = await self.bot.game.get_profile(ctx.author.id)
         if not profile:
             await ctx.send("Use `y!start` first.")
+            return
+
+        if slot1 is None and slot2 is None and slot3 is None:
+            current_team = await self.bot.game.get_team(profile.player_id)
+            await ctx.send(embed=team_embed(ctx.author, current_team))
             return
 
         raw_ids = [slot1, slot2, slot3]
@@ -391,6 +406,7 @@ class GameCog(commands.Cog):
         await ctx.send(embed=team_embed(ctx.author, team))
 
     @commands.command(
+        aliases=["lk", "fav", "favorite"],
         help="Lock or unlock a character in your collection.",
         extras={
             "category": "game",
@@ -413,6 +429,7 @@ class GameCog(commands.Cog):
         await ctx.send(f"`#{instance_id}` is now {'locked' if state else 'unlocked'}.")
 
     @commands.command(
+        aliases=["claim", "dailyreward"],
         help="Claim your daily rewards and streak bonus.",
         extras={
             "category": "profile",
@@ -435,6 +452,7 @@ class GameCog(commands.Cog):
         await ctx.send(embed=daily_embed(updated, rewards))
 
     @commands.command(
+        aliases=["up", "enhance"],
         help="Upgrade a character's level, skill, grade, or awaken them.",
         extras={
             "category": "game",
@@ -461,6 +479,7 @@ class GameCog(commands.Cog):
         await ctx.send(embed=upgrade_embed(character, action))
 
     @commands.command(
+        aliases=["lb", "top", "leader"],
         help="Show leaderboard categories like coins, crystals, rank, streak, story, or collection.",
         extras={
             "category": "profile",
@@ -496,6 +515,7 @@ class GameCog(commands.Cog):
         )
 
     @commands.command(
+        aliases=["addcoins"],
         help="Admin only: add coins to your profile or another player's profile.",
         extras={
             "category": "admin",
@@ -512,6 +532,7 @@ class GameCog(commands.Cog):
         await ctx.send(f"Gave {amount:,} coins to {target.display_name}. New total: {updated.coins:,}.")
 
     @commands.command(
+        aliases=["addcrystals"],
         help="Admin only: add crystals to a player.",
         extras={
             "category": "admin",
@@ -528,6 +549,7 @@ class GameCog(commands.Cog):
         await ctx.send(f"Gave {amount:,} crystals to {target.display_name}. New total: {updated.crystals:,}.")
 
     @commands.command(
+        aliases=["addmaterials", "addmats"],
         help="Admin only: add materials and stamina to a player.",
         extras={
             "category": "admin",
@@ -562,6 +584,7 @@ class GameCog(commands.Cog):
         )
 
     @commands.command(
+        aliases=["addcard", "givecard"],
         help="Admin only: grant character copies directly into a player's inventory.",
         extras={
             "category": "admin",
@@ -593,6 +616,7 @@ class GameCog(commands.Cog):
         )
 
     @commands.command(
+        aliases=["wipeplayer"],
         help="Admin only: completely reset one player's save.",
         extras={
             "category": "admin",

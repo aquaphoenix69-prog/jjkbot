@@ -255,3 +255,6 @@ CHARACTERS: list[CharacterDefinition] = [
         quote="Know the flames of true terror.",
     ),
 ]
+
+for index, character in enumerate(CHARACTERS, start=1):
+    character.card_number = index

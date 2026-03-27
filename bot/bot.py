@@ -47,3 +47,13 @@ class JJKBot(commands.Bot):
     async def close(self) -> None:
         await super().close()
         await self.db.close()
+
+    async def on_command_error(self, context: commands.Context, exception: commands.CommandError) -> None:
+        if isinstance(exception, commands.CommandNotFound):
+            content = context.message.content.strip()
+            if content.lower().startswith("y!"):
+                await context.send(
+                    "That isn't a valid `y!` command. Use `y!help` to see categories, or `y!help <command>` for details."
+                )
+            return
+        await super().on_command_error(context, exception)

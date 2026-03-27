@@ -58,16 +58,17 @@ class GameService:
             await self.db.execute(
                 """
                 INSERT INTO character_catalog (
-                    key, name, title, rarity, grade_label, image_url, base_hp, base_attack,
+                    key, card_number, name, title, rarity, grade_label, image_url, base_hp, base_attack,
                     base_defense, base_speed, base_energy, basic_skill,
                     ultimate_skill, passive, domain_name, banner_tags, drop_weight, quote
                 )
                 VALUES (
-                    $1, $2, $3, $4, $5, $6, $7, $8,
-                    $9, $10, $11, $12,
-                    $13, $14, $15, $16, $17, $18
+                    $1, $2, $3, $4, $5, $6, $7, $8, $9,
+                    $10, $11, $12, $13,
+                    $14, $15, $16, $17, $18, $19
                 )
                 ON CONFLICT (key) DO UPDATE SET
+                    card_number = EXCLUDED.card_number,
                     name = EXCLUDED.name,
                     title = EXCLUDED.title,
                     rarity = EXCLUDED.rarity,
@@ -87,6 +88,7 @@ class GameService:
                     quote = EXCLUDED.quote
                 """,
                 character.key,
+                character.card_number,
                 character.name,
                 character.title,
                 character.rarity,
@@ -178,7 +180,7 @@ class GameService:
         records = await self.db.fetch(
             """
             SELECT pc.*, cc.name, cc.title, cc.rarity, cc.grade_label, cc.base_hp,
-                   cc.image_url, cc.base_attack, cc.base_defense, cc.base_speed, cc.base_energy,
+                   cc.card_number, cc.image_url, cc.base_attack, cc.base_defense, cc.base_speed, cc.base_energy,
                    cc.basic_skill, cc.ultimate_skill, cc.passive, cc.domain_name,
                    cc.banner_tags, cc.drop_weight, cc.quote
             FROM player_characters pc
@@ -196,7 +198,7 @@ class GameService:
         row = await self.db.fetchrow(
             """
             SELECT pc.*, cc.name, cc.title, cc.rarity, cc.grade_label, cc.base_hp,
-                   cc.image_url, cc.base_attack, cc.base_defense, cc.base_speed, cc.base_energy,
+                   cc.card_number, cc.image_url, cc.base_attack, cc.base_defense, cc.base_speed, cc.base_energy,
                    cc.basic_skill, cc.ultimate_skill, cc.passive, cc.domain_name,
                    cc.banner_tags, cc.drop_weight, cc.quote
             FROM player_characters pc
@@ -659,6 +661,7 @@ class GameService:
             banner_tags=banner_tags,
             drop_weight=row["drop_weight"],
             quote=row["quote"],
+            card_number=row["card_number"],
         )
         return OwnedCharacter(
             instance_id=row["id"],

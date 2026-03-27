@@ -47,7 +47,8 @@ def summon_embed(
     embed.add_field(
         name="Result",
         value=(
-            f"`#{character.instance_id}` {character.definition.name}\n"
+            f"`Card #{character.definition.card_number}` {character.definition.name}\n"
+            f"Inventory ID: `#{character.instance_id}`\n"
             f"Rarity: {character.definition.rarity}\n"
             f"Sorcerer Grade: {character.definition.grade}\n"
             f"Basic Skill: {character.definition.basic_skill}\n"
@@ -99,7 +100,7 @@ def inventory_page_embed(
                 flags.append("Awakened")
             suffix = f" ({', '.join(flags)})" if flags else ""
             lines.append(
-                f"`#{owned.instance_id}` {owned.definition.name} [{owned.definition.rarity}]"
+                f"`Inst #{owned.instance_id}` `Card #{owned.definition.card_number}` {owned.definition.name} [{owned.definition.rarity}]"
                 f" | {owned.definition.grade} | Lv.{owned.level} G{owned.grade} S{owned.skill_level}{suffix}"
             )
         embed.add_field(name="Sorcerers", value="\n".join(lines), inline=False)
@@ -121,7 +122,7 @@ def team_embed(user: discord.abc.User, team: list[OwnedCharacter]) -> discord.Em
         embed.add_field(
             name=f"Slot {slot}",
             value=(
-                f"`#{owned.instance_id}` {owned.definition.name}\n"
+                f"`Inst #{owned.instance_id}` `Card #{owned.definition.card_number}` {owned.definition.name}\n"
                 f"{owned.definition.title}\n"
                 f"Lore Grade: {owned.definition.grade}\n"
                 f"Lv.{owned.level} | Grade {owned.grade} | Skill {owned.skill_level}"

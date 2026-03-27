@@ -24,6 +24,7 @@ class CharacterDefinition:
     banner_tags: list[str]
     drop_weight: int
     quote: str
+    card_number: int = 0
 
 
 @dataclass(slots=True)

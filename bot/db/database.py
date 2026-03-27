@@ -14,6 +14,7 @@ from bot.config import get_settings
 SCHEMA_SQL_POSTGRES = """
 CREATE TABLE IF NOT EXISTS character_catalog (
     key TEXT PRIMARY KEY,
+    card_number INTEGER NOT NULL DEFAULT 0,
     name TEXT NOT NULL,
     title TEXT NOT NULL,
     rarity TEXT NOT NULL,
@@ -86,6 +87,7 @@ PRAGMA foreign_keys = ON;
 
 CREATE TABLE IF NOT EXISTS character_catalog (
     key TEXT PRIMARY KEY,
+    card_number INTEGER NOT NULL DEFAULT 0,
     name TEXT NOT NULL,
     title TEXT NOT NULL,
     rarity TEXT NOT NULL,
@@ -177,8 +179,12 @@ class Database:
     async def initialize(self) -> None:
         if self.is_sqlite:
             await self._sqlite_exec_script(SCHEMA_SQL_SQLITE)
+            await self._sqlite_ensure_column("character_catalog", "card_number", "INTEGER NOT NULL DEFAULT 0")
             return
         await self.execute(SCHEMA_SQL_POSTGRES)
+        await self.execute(
+            "ALTER TABLE character_catalog ADD COLUMN IF NOT EXISTS card_number INTEGER NOT NULL DEFAULT 0"
+        )
 
     async def execute(self, query: str, *args: Any) -> str:
         if self.is_sqlite:
@@ -280,6 +286,15 @@ class Database:
     async def _sqlite_exec_script(self, script: str) -> None:
         async with aiosqlite.connect(self.sqlite_path) as conn:  # type: ignore[arg-type]
             await conn.executescript(script)
+            await conn.commit()
+
+    async def _sqlite_ensure_column(self, table: str, column: str, definition: str) -> None:
+        async with aiosqlite.connect(self.sqlite_path) as conn:  # type: ignore[arg-type]
+            cursor = await conn.execute(f"PRAGMA table_info({table})")
+            rows = await cursor.fetchall()
+            if any(row[1] == column for row in rows):
+                return
+            await conn.execute(f"ALTER TABLE {table} ADD COLUMN {column} {definition}")
             await conn.commit()
 
     async def _sqlite_execute(self, query: str, args: tuple[Any, ...]) -> None:
