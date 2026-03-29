@@ -118,7 +118,10 @@ def inventory_page_embed(
                 f"`HP {owned.effective_hp}` `ATK {owned.effective_attack}` `DEF {owned.effective_defense}` `SPD {owned.effective_speed}`\n"
                 f"`XP {owned.xp}/{owned.next_level_xp if owned.level < 100 else 0}` `Enh XP {owned.enhancement_xp}/{owned.next_enhancement_xp if owned.enhancement_level < owned.max_enhancement_level else 0}`"
             )
-        embed.add_field(name="Inventory", value="\n\n".join(lines), inline=False)
+        chunks = _chunk_inventory_lines(lines)
+        for index, chunk in enumerate(chunks, start=1):
+            name = "Inventory" if index == 1 else f"Inventory {index}"
+            embed.add_field(name=name, value=chunk, inline=False)
         if page_items[0].definition.image_url:
             embed.set_thumbnail(url=page_items[0].definition.image_url)
     filter_text = rarity_filter.title() if rarity_filter else "All"
@@ -476,3 +479,19 @@ def _rarity_color(rarity: str) -> discord.Color:
         "legendary": discord.Color.gold(),
     }
     return mapping.get(rarity.lower(), discord.Color.blurple())
+
+
+def _chunk_inventory_lines(lines: list[str]) -> list[str]:
+    chunks: list[str] = []
+    current = ""
+    for line in lines:
+        candidate = line if not current else f"{current}\n\n{line}"
+        if len(candidate) > 950:
+            if current:
+                chunks.append(current)
+            current = line
+        else:
+            current = candidate
+    if current:
+        chunks.append(current)
+    return chunks or ["No characters collected yet."]

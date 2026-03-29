@@ -578,12 +578,12 @@ class GameCog(commands.Cog):
                 ctx.author,
                 characters,
                 page,
-                8,
+                4,
                 inventory_serials=inventory_serials,
                 sort_label=" > ".join(self.bot.game.INVENTORY_SORT_LABELS.get(item, item.title()) for item in sort_key),
                 rarity_filter=rarity_filter,
             )
-            for page in range(max(1, (len(characters) + 7) // 8))
+            for page in range(max(1, (len(characters) + 3) // 4))
         ]
         await ctx.send(embed=embeds[0], view=InventoryView(ctx.author.id, embeds))
 
