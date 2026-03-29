@@ -125,6 +125,59 @@ def inventory_page_embed(
     return embed
 
 
+def summon_summary_embed(
+    user: discord.abc.User,
+    summon_type: str,
+    recruits: list[OwnedCharacter],
+    profile: PlayerProfile,
+) -> discord.Embed:
+    summon_data = SUMMON_TYPES[summon_type]
+    counts: dict[str, int] = {}
+    featured: list[str] = []
+    for recruit in recruits:
+        rarity = recruit.definition.rarity
+        counts[rarity] = counts.get(rarity, 0) + 1
+    sorted_recruits = sorted(
+        recruits,
+        key=lambda owned: (
+            {"legendary": 3, "epic": 2, "rare": 1, "normal": 0}.get(owned.definition.rarity.lower(), -1),
+            owned.power,
+        ),
+        reverse=True,
+    )
+    for recruit in sorted_recruits[:8]:
+        featured.append(
+            f"Print {recruit.instance_id} | {recruit.definition.name} [{recruit.definition.rarity}]"
+        )
+
+    embed = discord.Embed(
+        title=f"{user.display_name} used {summon_data['name']} x{len(recruits)}",
+        color=discord.Color(summon_data["color"]),
+        description="Large summon completed. Showing a compact summary so the result stays fast and readable.",
+    )
+    embed.add_field(
+        name="Rarity Summary",
+        value="\n".join(f"{rarity}: {count}" for rarity, count in sorted(counts.items())) or "No recruits",
+        inline=False,
+    )
+    embed.add_field(
+        name="Featured Pulls",
+        value="\n".join(featured) or "No featured pulls",
+        inline=False,
+    )
+    embed.add_field(name="Remaining Coins", value=f"{profile.coins:,}", inline=False)
+    return embed
+
+
+def resource_embed(user: discord.abc.User, label: str, value: str, color: discord.Color) -> discord.Embed:
+    embed = discord.Embed(
+        title=f"{user.display_name}'s {label}",
+        color=color,
+    )
+    embed.description = value
+    return embed
+
+
 def team_embed(user: discord.abc.User, team: list[OwnedCharacter]) -> discord.Embed:
     embed = discord.Embed(
         title=f"{user.display_name}'s Active Team",

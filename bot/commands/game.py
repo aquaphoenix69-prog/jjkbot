@@ -16,7 +16,9 @@ from bot.utils.embeds import (
     inventory_page_embed,
     leaderboard_embed,
     profile_embed,
+    resource_embed,
     summon_embed,
+    summon_summary_embed,
     team_embed,
     upgrade_embed,
 )
@@ -127,7 +129,7 @@ class GameCog(commands.Cog):
         self.help_categories = {
             "profile": {
                 "description": "Account setup, progression overview, streaks, and ranking.",
-                "commands": ["start", "profile", "daily", "leaderboard", "ping"],
+                "commands": ["start", "profile", "coins", "crystals", "stamina", "materials", "daily", "leaderboard", "ping"],
             },
             "game": {
                 "description": "Collection management, summoning, teams, and upgrades.",
@@ -262,6 +264,79 @@ class GameCog(commands.Cog):
         await ctx.send(embed=profile_embed(ctx.author, profile))
 
     @commands.command(
+        aliases=["c", "money", "bal"],
+        help="Show your coin balance only.",
+        extras={
+            "category": "profile",
+            "usage": "y!coins",
+            "examples": ["y!coins", "y!c"],
+            "details": "Quick command to check your current coins without opening the full profile.",
+        },
+    )
+    async def coins(self, ctx: commands.Context) -> None:
+        profile = await self.bot.game.get_profile(ctx.author.id)
+        if not profile:
+            await ctx.send("Use `y!start` first.")
+            return
+        await ctx.send(embed=resource_embed(ctx.author, "Coins", f"{profile.coins:,} Coins", discord.Color.gold()))
+
+    @commands.command(
+        aliases=["gems", "crys"],
+        help="Show your crystal balance only.",
+        extras={
+            "category": "profile",
+            "usage": "y!crystals",
+            "examples": ["y!crystals", "y!gems"],
+            "details": "Quick command to check your crystals without opening the full profile.",
+        },
+    )
+    async def crystals(self, ctx: commands.Context) -> None:
+        profile = await self.bot.game.get_profile(ctx.author.id)
+        if not profile:
+            await ctx.send("Use `y!start` first.")
+            return
+        await ctx.send(embed=resource_embed(ctx.author, "Crystals", f"{profile.crystals:,} Crystals", discord.Color.blue()))
+
+    @commands.command(
+        aliases=["sta", "energy"],
+        help="Show your current stamina only.",
+        extras={
+            "category": "profile",
+            "usage": "y!stamina",
+            "examples": ["y!stamina", "y!sta"],
+            "details": "Quick command to check how much stamina you currently have.",
+        },
+    )
+    async def stamina(self, ctx: commands.Context) -> None:
+        profile = await self.bot.game.get_profile(ctx.author.id)
+        if not profile:
+            await ctx.send("Use `y!start` first.")
+            return
+        await ctx.send(embed=resource_embed(ctx.author, "Stamina", f"{profile.stamina}/{profile.max_stamina} Stamina", discord.Color.orange()))
+
+    @commands.command(
+        aliases=["mats", "mat"],
+        help="Show your upgrade materials only.",
+        extras={
+            "category": "profile",
+            "usage": "y!materials",
+            "examples": ["y!materials", "y!mats"],
+            "details": "Quick command to check training scrolls, skill scrolls, and grade seals.",
+        },
+    )
+    async def materials(self, ctx: commands.Context) -> None:
+        profile = await self.bot.game.get_profile(ctx.author.id)
+        if not profile:
+            await ctx.send("Use `y!start` first.")
+            return
+        value = (
+            f"Training Scrolls: {profile.training_scrolls}\n"
+            f"Skill Scrolls: {profile.skill_scrolls}\n"
+            f"Grade Seals: {profile.grade_seals}"
+        )
+        await ctx.send(embed=resource_embed(ctx.author, "Materials", value, discord.Color.dark_teal()))
+
+    @commands.command(
         aliases=["sum", "pull", "roll"],
         help="Summon characters with normal, rare, epic, or legendary rituals.",
         extras={
@@ -299,6 +374,9 @@ class GameCog(commands.Cog):
             )
         except ValueError as exc:
             await ctx.send(str(exc))
+            return
+        if amount > 10:
+            await ctx.send(embed=summon_summary_embed(ctx.author, summon_type, recruits, updated))
             return
         entries = [
             await self._build_summon_entry(ctx.author, summon_type, recruit, updated, amount)
