@@ -661,27 +661,28 @@ class GameService:
 
         chosen = list(fodder)
         new_level, new_xp, consumed_count = self._calculate_enhancement_progress(target, chosen)
-        statements: list[tuple[str, tuple[object, ...]]] = [
-            (
-                """
-                UPDATE player_characters
-                SET level = $3,
-                    xp = $4,
-                    enhancement_level = 0,
-                    enhancement_xp = 0
-                WHERE player_id = $1 AND id = $2
-                """,
-                (player_id, target_instance_id, new_level, new_xp),
-            ),
-        ]
-        statements.extend(
-            (
-                "DELETE FROM player_characters WHERE player_id = $1 AND id = $2",
-                (player_id, character.instance_id),
-            )
-            for character in chosen[:consumed_count]
+        await self.db.execute(
+            """
+            UPDATE player_characters
+            SET level = $3,
+                xp = $4,
+                enhancement_level = 0,
+                enhancement_xp = 0
+            WHERE player_id = $1 AND id = $2
+            """,
+            player_id,
+            target_instance_id,
+            new_level,
+            new_xp,
         )
-        await self.db.executemany(statements)
+        consumed_ids = [character.instance_id for character in chosen[:consumed_count]]
+        if consumed_ids:
+            placeholders = ", ".join(f"${index}" for index in range(2, len(consumed_ids) + 2))
+            await self.db.execute(
+                f"DELETE FROM player_characters WHERE player_id = $1 AND id IN ({placeholders})",
+                player_id,
+                *consumed_ids,
+            )
         updated = await self.get_character_instance(player_id, target_instance_id)
         if not updated:
             raise ValueError("Enhancement completed but the character could not be reloaded.")
