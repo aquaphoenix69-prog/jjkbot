@@ -45,6 +45,16 @@ class OwnedCharacter:
     skill_level: int
     enhancement_level: int
     evolution_stage: int
+    hp_roll: int
+    attack_roll: int
+    defense_roll: int
+    speed_roll: int
+    energy_roll: int
+    hp_bonus: int
+    attack_bonus: int
+    defense_bonus: int
+    speed_bonus: int
+    energy_bonus: int
     awakened: bool
     locked: bool
     acquired_at: datetime
@@ -59,26 +69,66 @@ class OwnedCharacter:
         return 1.0 + self.enhancement_level * 0.025 + self.evolution_stage * 0.18
 
     @property
+    def max_hp_stat(self) -> int:
+        return self.definition.base_hp * 2
+
+    @property
+    def max_attack_stat(self) -> int:
+        return self.definition.base_attack * 2
+
+    @property
+    def max_defense_stat(self) -> int:
+        return self.definition.base_defense * 2
+
+    @property
+    def max_speed_stat(self) -> int:
+        return self.definition.base_speed * 2
+
+    @property
+    def max_energy_stat(self) -> int:
+        return self.definition.base_energy * 2
+
+    @property
+    def rolled_hp(self) -> int:
+        return max(1, min(self.max_hp_stat, self.definition.base_hp + self.hp_roll + self.hp_bonus))
+
+    @property
+    def rolled_attack(self) -> int:
+        return max(1, min(self.max_attack_stat, self.definition.base_attack + self.attack_roll + self.attack_bonus))
+
+    @property
+    def rolled_defense(self) -> int:
+        return max(1, min(self.max_defense_stat, self.definition.base_defense + self.defense_roll + self.defense_bonus))
+
+    @property
+    def rolled_speed(self) -> int:
+        return max(1, min(self.max_speed_stat, self.definition.base_speed + self.speed_roll + self.speed_bonus))
+
+    @property
+    def rolled_energy(self) -> int:
+        return max(1, min(self.max_energy_stat, self.definition.base_energy + self.energy_roll + self.energy_bonus))
+
+    @property
     def effective_hp(self) -> int:
-        return int(self.definition.base_hp * self.stat_multiplier)
+        return int(self.rolled_hp * self.stat_multiplier)
 
     @property
     def effective_attack(self) -> int:
-        return int(self.definition.base_attack * self.stat_multiplier)
+        return int(self.rolled_attack * self.stat_multiplier)
 
     @property
     def effective_defense(self) -> int:
-        return int(self.definition.base_defense * self.stat_multiplier)
+        return int(self.rolled_defense * self.stat_multiplier)
 
     @property
     def effective_speed(self) -> int:
         speed_bonus = 1.0 + self.enhancement_level * 0.01 + self.evolution_stage * 0.05
-        return int(self.definition.base_speed * speed_bonus)
+        return int(self.rolled_speed * speed_bonus)
 
     @property
     def effective_energy(self) -> int:
         energy_bonus = 1.0 + self.enhancement_level * 0.008 + self.evolution_stage * 0.04
-        return int(self.definition.base_energy * energy_bonus)
+        return int(self.rolled_energy * energy_bonus)
 
     @property
     def power(self) -> int:

@@ -63,6 +63,16 @@ CREATE TABLE IF NOT EXISTS player_characters (
     skill_level INTEGER NOT NULL DEFAULT 1,
     enhancement_level INTEGER NOT NULL DEFAULT 0,
     evolution_stage INTEGER NOT NULL DEFAULT 0,
+    hp_roll INTEGER NOT NULL DEFAULT 0,
+    attack_roll INTEGER NOT NULL DEFAULT 0,
+    defense_roll INTEGER NOT NULL DEFAULT 0,
+    speed_roll INTEGER NOT NULL DEFAULT 0,
+    energy_roll INTEGER NOT NULL DEFAULT 0,
+    hp_bonus INTEGER NOT NULL DEFAULT 0,
+    attack_bonus INTEGER NOT NULL DEFAULT 0,
+    defense_bonus INTEGER NOT NULL DEFAULT 0,
+    speed_bonus INTEGER NOT NULL DEFAULT 0,
+    energy_bonus INTEGER NOT NULL DEFAULT 0,
     awakened BOOLEAN NOT NULL DEFAULT FALSE,
     locked BOOLEAN NOT NULL DEFAULT FALSE,
     acquired_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
@@ -138,6 +148,16 @@ CREATE TABLE IF NOT EXISTS player_characters (
     skill_level INTEGER NOT NULL DEFAULT 1,
     enhancement_level INTEGER NOT NULL DEFAULT 0,
     evolution_stage INTEGER NOT NULL DEFAULT 0,
+    hp_roll INTEGER NOT NULL DEFAULT 0,
+    attack_roll INTEGER NOT NULL DEFAULT 0,
+    defense_roll INTEGER NOT NULL DEFAULT 0,
+    speed_roll INTEGER NOT NULL DEFAULT 0,
+    energy_roll INTEGER NOT NULL DEFAULT 0,
+    hp_bonus INTEGER NOT NULL DEFAULT 0,
+    attack_bonus INTEGER NOT NULL DEFAULT 0,
+    defense_bonus INTEGER NOT NULL DEFAULT 0,
+    speed_bonus INTEGER NOT NULL DEFAULT 0,
+    energy_bonus INTEGER NOT NULL DEFAULT 0,
     awakened INTEGER NOT NULL DEFAULT 0,
     locked INTEGER NOT NULL DEFAULT 0,
     acquired_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
@@ -186,6 +206,16 @@ class Database:
             await self._sqlite_ensure_column("character_catalog", "card_number", "INTEGER NOT NULL DEFAULT 0")
             await self._sqlite_ensure_column("player_characters", "enhancement_level", "INTEGER NOT NULL DEFAULT 0")
             await self._sqlite_ensure_column("player_characters", "evolution_stage", "INTEGER NOT NULL DEFAULT 0")
+            await self._sqlite_ensure_column("player_characters", "hp_roll", "INTEGER NOT NULL DEFAULT 0")
+            await self._sqlite_ensure_column("player_characters", "attack_roll", "INTEGER NOT NULL DEFAULT 0")
+            await self._sqlite_ensure_column("player_characters", "defense_roll", "INTEGER NOT NULL DEFAULT 0")
+            await self._sqlite_ensure_column("player_characters", "speed_roll", "INTEGER NOT NULL DEFAULT 0")
+            await self._sqlite_ensure_column("player_characters", "energy_roll", "INTEGER NOT NULL DEFAULT 0")
+            await self._sqlite_ensure_column("player_characters", "hp_bonus", "INTEGER NOT NULL DEFAULT 0")
+            await self._sqlite_ensure_column("player_characters", "attack_bonus", "INTEGER NOT NULL DEFAULT 0")
+            await self._sqlite_ensure_column("player_characters", "defense_bonus", "INTEGER NOT NULL DEFAULT 0")
+            await self._sqlite_ensure_column("player_characters", "speed_bonus", "INTEGER NOT NULL DEFAULT 0")
+            await self._sqlite_ensure_column("player_characters", "energy_bonus", "INTEGER NOT NULL DEFAULT 0")
             return
         await self.execute(SCHEMA_SQL_POSTGRES)
         await self.execute(
@@ -197,6 +227,16 @@ class Database:
         await self.execute(
             "ALTER TABLE player_characters ADD COLUMN IF NOT EXISTS evolution_stage INTEGER NOT NULL DEFAULT 0"
         )
+        await self.execute("ALTER TABLE player_characters ADD COLUMN IF NOT EXISTS hp_roll INTEGER NOT NULL DEFAULT 0")
+        await self.execute("ALTER TABLE player_characters ADD COLUMN IF NOT EXISTS attack_roll INTEGER NOT NULL DEFAULT 0")
+        await self.execute("ALTER TABLE player_characters ADD COLUMN IF NOT EXISTS defense_roll INTEGER NOT NULL DEFAULT 0")
+        await self.execute("ALTER TABLE player_characters ADD COLUMN IF NOT EXISTS speed_roll INTEGER NOT NULL DEFAULT 0")
+        await self.execute("ALTER TABLE player_characters ADD COLUMN IF NOT EXISTS energy_roll INTEGER NOT NULL DEFAULT 0")
+        await self.execute("ALTER TABLE player_characters ADD COLUMN IF NOT EXISTS hp_bonus INTEGER NOT NULL DEFAULT 0")
+        await self.execute("ALTER TABLE player_characters ADD COLUMN IF NOT EXISTS attack_bonus INTEGER NOT NULL DEFAULT 0")
+        await self.execute("ALTER TABLE player_characters ADD COLUMN IF NOT EXISTS defense_bonus INTEGER NOT NULL DEFAULT 0")
+        await self.execute("ALTER TABLE player_characters ADD COLUMN IF NOT EXISTS speed_bonus INTEGER NOT NULL DEFAULT 0")
+        await self.execute("ALTER TABLE player_characters ADD COLUMN IF NOT EXISTS energy_bonus INTEGER NOT NULL DEFAULT 0")
 
     async def execute(self, query: str, *args: Any) -> str:
         if self.is_sqlite:

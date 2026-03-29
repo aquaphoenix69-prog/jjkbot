@@ -133,14 +133,15 @@ def summon_summary_embed(
 ) -> discord.Embed:
     summon_data = SUMMON_TYPES[summon_type]
     counts: dict[str, int] = {}
-    grouped: dict[str, int] = {}
+    grouped: dict[tuple[str, str], int] = {}
     for recruit in recruits:
         rarity = recruit.definition.rarity
         counts[rarity] = counts.get(rarity, 0) + 1
-        grouped[recruit.definition.name] = grouped.get(recruit.definition.name, 0) + 1
+        key = (recruit.definition.name, recruit.definition.rarity)
+        grouped[key] = grouped.get(key, 0) + 1
     grouped_lines = [
-        f"{count} {name} summoned"
-        for name, count in sorted(grouped.items(), key=lambda item: (-item[1], item[0].lower()))
+        f"{count} {name} [{rarity}] summoned"
+        for (name, rarity), count in sorted(grouped.items(), key=lambda item: (-item[1], item[0][0].lower()))
     ]
 
     embed = discord.Embed(

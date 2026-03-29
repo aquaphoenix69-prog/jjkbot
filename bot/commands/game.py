@@ -137,7 +137,7 @@ class GameCog(commands.Cog):
             },
             "admin": {
                 "description": "Owner-only economy and inventory controls.",
-                "commands": ["admincoins", "admincrystals", "adminmaterials", "admincard", "adminreset"],
+                "commands": ["admincoins", "admincrystals", "adminmaterials", "admincard", "addstat", "adminreset"],
             },
             "battle": {
                 "description": "PvE fights, boss raids, and PvP challenges.",
@@ -408,8 +408,8 @@ class GameCog(commands.Cog):
                 return int(tail)
         return None
 
-    def _parse_inventory_options(self, options: list[str]) -> tuple[str, str | None, bool]:
-        sort_key = "default"
+    def _parse_inventory_options(self, options: list[str]) -> tuple[list[str], str | None, bool]:
+        sort_keys: list[str] = []
         rarity_filter: str | None = None
         ascending = False
         index = 0
@@ -456,16 +456,16 @@ class GameCog(commands.Cog):
                     rarity_filter = rarity_aliases[next_token]
                     index += 1
                 else:
-                    sort_key = "rarity"
+                    sort_keys.append("rarity")
             elif option in sort_aliases:
-                sort_key = sort_aliases[option]
+                sort_keys.append(sort_aliases[option])
             else:
                 raise ValueError(
                     "Unknown inventory option. Use `-r [rarity]`, `-name`, `-hp`, `-atk`, `-def`, `-spd`, `-energy`, `-power`, `-lvl`, `-enh`, `-evo`, `-id`, `-card`, or `-asc`."
                 )
             index += 1
 
-        return sort_key, rarity_filter, ascending
+        return (sort_keys or ["default"]), rarity_filter, ascending
 
     def _parse_enhancement_rarity(self, options: list[str]) -> str:
         if len(options) != 2 or options[0].lower().strip() != "-r":
@@ -550,7 +550,7 @@ class GameCog(commands.Cog):
             "category": "game",
             "usage": "y!inventory [-r [rarity]] [-name|-hp|-atk|-def|-spd|-energy|-power|-lvl|-enh|-evo|-id|-card] [-asc]",
             "examples": ["y!inventory", "y!inv -r", "y!inv -r l", "y!inv -name", "y!inv -atk", "y!inv -power -asc"],
-            "details": "Use `-r` alone to sort by rarity or `-r l`/`-r legendary` to filter to one rarity. `-name` sorts alphabetically. The visible inventory serial stays tied to the real full inventory order even when filtered.",
+            "details": "Use `-r` alone to sort by rarity or `-r l`/`-r legendary` to filter to one rarity. `-name` sorts alphabetically. You can chain sort flags like `-r r -atk`. The visible inventory serial stays tied to the real full inventory order even when filtered.",
         },
     )
     @commands.cooldown(1, 4.0, commands.BucketType.user)
@@ -578,7 +578,7 @@ class GameCog(commands.Cog):
                 page,
                 8,
                 inventory_serials=inventory_serials,
-                sort_label=self.bot.game.INVENTORY_SORT_LABELS.get(sort_key, "Default"),
+                sort_label=" > ".join(self.bot.game.INVENTORY_SORT_LABELS.get(item, item.title()) for item in sort_key),
                 rarity_filter=rarity_filter,
             )
             for page in range(max(1, (len(characters) + 7) // 8))
@@ -958,6 +958,47 @@ class GameCog(commands.Cog):
             return
         await ctx.send(
             f"Granted {len(granted)} copy/copies of `{character_key}` to {target.display_name}."
+        )
+
+    @commands.command(
+        aliases=["booststat"],
+        help="Admin only: add permanent bonus stats to one owned card by inventory number.",
+        extras={
+            "category": "admin",
+            "usage": "y!addstat <@user> <inventory_number> <hp|atk|def|spd|energy> <amount>",
+            "examples": ["y!addstat @nez 1 atk 100", "y!addstat @nez 8 hp 50"],
+            "details": "Adds permanent bonus stats to the chosen owned card. Each stat is capped at double that card's base stat after rolls and boosts are combined.",
+        },
+    )
+    async def addstat(
+        self,
+        ctx: commands.Context,
+        target: discord.Member,
+        inventory_number: int,
+        stat_name: str,
+        amount: int,
+    ) -> None:
+        if not await self._require_admin(ctx):
+            return
+        if amount < 1:
+            await ctx.send("Amount must be at least 1.")
+            return
+        profile = await self._get_or_create_target_profile(target)
+        try:
+            updated = await self.bot.game.admin_add_character_stat(
+                profile.player_id,
+                inventory_number,
+                stat_name,
+                amount,
+            )
+        except ValueError as exc:
+            await ctx.send(str(exc))
+            return
+        await ctx.send(
+            f"Boosted {target.display_name}'s inventory no. {inventory_number} "
+            f"({updated.definition.name}, print {updated.instance_id}). "
+            f"Stats are now HP {updated.rolled_hp}, ATK {updated.rolled_attack}, DEF {updated.rolled_defense}, "
+            f"SPD {updated.rolled_speed}, ENERGY {updated.rolled_energy}."
         )
 
     @commands.command(

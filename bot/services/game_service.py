@@ -26,6 +26,16 @@ class GameService:
         "id": "Inventory ID",
         "card": "Card Number",
     }
+    STAT_FIELDS = {
+        "hp": ("hp_bonus", "max_hp_stat"),
+        "atk": ("attack_bonus", "max_attack_stat"),
+        "attack": ("attack_bonus", "max_attack_stat"),
+        "def": ("defense_bonus", "max_defense_stat"),
+        "defense": ("defense_bonus", "max_defense_stat"),
+        "spd": ("speed_bonus", "max_speed_stat"),
+        "speed": ("speed_bonus", "max_speed_stat"),
+        "energy": ("energy_bonus", "max_energy_stat"),
+    }
     RARITY_ORDER = {
         "normal": 0,
         "rare": 1,
@@ -187,14 +197,24 @@ class GameService:
         return self._profile_from_record(record)
 
     async def add_character(self, player_id: int, character_key: str) -> int:
+        definition = self.character_map.get(character_key)
+        if not definition:
+            raise ValueError("Unknown character key.")
         instance_id = await self.db.fetchval(
             """
-            INSERT INTO player_characters (player_id, character_key)
-            VALUES ($1, $2)
+            INSERT INTO player_characters (
+                player_id, character_key, hp_roll, attack_roll, defense_roll, speed_roll, energy_roll
+            )
+            VALUES ($1, $2, $3, $4, $5, $6, $7)
             RETURNING id
             """,
             player_id,
             character_key,
+            random.randint(-100, 100),
+            random.randint(-100, 100),
+            random.randint(-100, 100),
+            random.randint(-100, 100),
+            random.randint(-100, 100),
         )
         return int(instance_id)
 
@@ -202,7 +222,7 @@ class GameService:
         self,
         player_id: int,
         *,
-        sort_key: str = "default",
+        sort_key: str | list[str] = "default",
         rarity_filter: str | None = None,
         ascending: bool = False,
     ) -> list[OwnedCharacter]:
@@ -659,6 +679,47 @@ class GameService:
                 granted.append(owned)
         return granted
 
+    async def admin_add_character_stat(
+        self,
+        player_id: int,
+        inventory_position: int,
+        stat_name: str,
+        amount: int,
+    ) -> OwnedCharacter:
+        character = await self.get_inventory_entry_by_position(player_id, inventory_position)
+        if not character:
+            raise ValueError("That inventory number does not exist.")
+        normalized = stat_name.lower().strip()
+        field_data = self.STAT_FIELDS.get(normalized)
+        if not field_data:
+            raise ValueError("Stat must be hp, atk, def, spd, or energy.")
+        bonus_column, cap_attr = field_data
+        current_total = {
+            "hp_bonus": character.definition.base_hp + character.hp_roll + character.hp_bonus,
+            "attack_bonus": character.definition.base_attack + character.attack_roll + character.attack_bonus,
+            "defense_bonus": character.definition.base_defense + character.defense_roll + character.defense_bonus,
+            "speed_bonus": character.definition.base_speed + character.speed_roll + character.speed_bonus,
+            "energy_bonus": character.definition.base_energy + character.energy_roll + character.energy_bonus,
+        }[bonus_column]
+        cap_value = getattr(character, cap_attr)
+        applied = min(amount, max(0, cap_value - current_total))
+        if applied <= 0:
+            raise ValueError("That stat is already at its cap for this card.")
+        await self.db.execute(
+            f"""
+            UPDATE player_characters
+            SET {bonus_column} = {bonus_column} + $3
+            WHERE player_id = $1 AND id = $2
+            """,
+            player_id,
+            character.instance_id,
+            applied,
+        )
+        updated = await self.get_character_instance(player_id, character.instance_id)
+        if not updated:
+            raise ValueError("Card updated but could not be reloaded.")
+        return updated
+
     async def admin_reset_profile(self, player_id: int) -> None:
         await self.db.executemany(
             [
@@ -892,6 +953,16 @@ class GameService:
             skill_level=row["skill_level"],
             enhancement_level=row["enhancement_level"],
             evolution_stage=row["evolution_stage"],
+            hp_roll=row["hp_roll"],
+            attack_roll=row["attack_roll"],
+            defense_roll=row["defense_roll"],
+            speed_roll=row["speed_roll"],
+            energy_roll=row["energy_roll"],
+            hp_bonus=row["hp_bonus"],
+            attack_bonus=row["attack_bonus"],
+            defense_bonus=row["defense_bonus"],
+            speed_bonus=row["speed_bonus"],
+            energy_bonus=row["energy_bonus"],
             awakened=bool(row["awakened"]),
             locked=bool(row["locked"]),
             acquired_at=acquired_at,
@@ -902,7 +973,7 @@ class GameService:
         self,
         characters: list[OwnedCharacter],
         *,
-        sort_key: str,
+        sort_key: str | list[str],
         rarity_filter: str | None,
         ascending: bool,
     ) -> list[OwnedCharacter]:
@@ -914,25 +985,15 @@ class GameService:
                 if character.definition.rarity.lower() == normalized_filter
             ]
 
-        normalized_sort = sort_key.lower().strip()
-        if normalized_sort not in self.INVENTORY_SORT_LABELS:
-            normalized_sort = "default"
-
-        if normalized_sort == "default":
-            return sorted(
-                characters,
-                key=lambda owned: (
-                    owned.locked,
-                    owned.awakened,
-                    owned.evolution_stage,
-                    owned.enhancement_level,
-                    owned.level,
-                    -owned.instance_id,
-                ),
-                reverse=True,
-            )
-
         sorters = {
+            "default": lambda owned: (
+                owned.locked,
+                owned.awakened,
+                owned.evolution_stage,
+                owned.enhancement_level,
+                owned.level,
+                -owned.instance_id,
+            ),
             "name": lambda owned: (
                 owned.definition.name.lower(),
                 owned.definition.rarity.lower(),
@@ -957,7 +1018,24 @@ class GameService:
             "id": lambda owned: owned.instance_id,
             "card": lambda owned: (owned.definition.card_number, -owned.instance_id),
         }
-        return sorted(characters, key=sorters[normalized_sort], reverse=not ascending)
+        sort_keys = sort_key if isinstance(sort_key, list) else [sort_key]
+        normalized_sorts = []
+        for item in sort_keys:
+            normalized = item.lower().strip()
+            if normalized not in self.INVENTORY_SORT_LABELS:
+                continue
+            normalized_sorts.append(normalized)
+        if not normalized_sorts:
+            normalized_sorts = ["default"]
+
+        ordered = list(characters)
+        for normalized in reversed(normalized_sorts):
+            ordered = sorted(
+                ordered,
+                key=sorters[normalized],
+                reverse=False if normalized in {"name", "id", "card"} and ascending else not ascending,
+            )
+        return ordered
 
     def _build_summon_pool(self, summon_type: str) -> list[tuple[CharacterDefinition, float]]:
         summon_data = SUMMON_TYPES[summon_type]
