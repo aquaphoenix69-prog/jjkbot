@@ -37,13 +37,16 @@ class JJKBot(commands.Bot):
 
         await self.load_extension("bot.commands.game")
         await self.load_extension("bot.commands.battle")
-        if self.settings.dev_guild_id:
-            guild = discord.Object(id=self.settings.dev_guild_id)
-            synced = await self.tree.sync(guild=guild)
-            LOGGER.info("Cleared or synced %s guild slash commands; prefix commands are active with y!", len(synced))
-        else:
-            synced = await self.tree.sync()
-            LOGGER.info("Cleared or synced %s global slash commands; prefix commands are active with y!", len(synced))
+        try:
+            if self.settings.dev_guild_id:
+                guild = discord.Object(id=self.settings.dev_guild_id)
+                synced = await self.tree.sync(guild=guild)
+                LOGGER.info("Cleared or synced %s guild slash commands; prefix commands are active with y!", len(synced))
+            else:
+                synced = await self.tree.sync()
+                LOGGER.info("Cleared or synced %s global slash commands; prefix commands are active with y!", len(synced))
+        except discord.MissingApplicationID:
+            LOGGER.warning("Skipping app command sync during startup because application_id is not available yet.")
 
     async def close(self) -> None:
         await super().close()
