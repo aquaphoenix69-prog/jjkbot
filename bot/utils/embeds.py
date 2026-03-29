@@ -306,7 +306,7 @@ def evolution_embed(character: OwnedCharacter, consumed_ids: list[int]) -> disco
     embed = discord.Embed(
         title=f"{character.definition.name} evolved",
         color=discord.Color.dark_gold(),
-        description=f"Evolved to stage {character.evolution_stage}/3 by consuming copies: {', '.join(f'#{item}' for item in consumed_ids)}",
+        description=f"Evolved to stage {character.evolution_stage}/3 using inventory numbers: {', '.join(str(item) for item in consumed_ids)}",
     )
     embed.add_field(
         name="Current State",

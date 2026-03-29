@@ -740,29 +740,34 @@ class GameService:
         )
         return consumed_count, new_level - target.level
 
-    async def evolve_character(self, player_id: int, target_instance_id: int) -> tuple[OwnedCharacter, list[int]]:
+    async def evolve_character(
+        self,
+        player_id: int,
+        target_instance_id: int,
+        sacrifice_instance_id: int,
+    ) -> tuple[OwnedCharacter, list[int]]:
         target = await self.get_character_instance(player_id, target_instance_id)
         if not target:
             raise ValueError("Character instance not found.")
         if target.evolution_stage >= 3:
             raise ValueError("This character is already at max evolution.")
+        if target_instance_id == sacrifice_instance_id:
+            raise ValueError("Use two different inventory cards for evolution.")
+        if target.level < target.max_level:
+            raise ValueError(f"{target.definition.name} must be at max level before evolving.")
 
-        owned = await self.get_owned_characters(player_id, sort_key="id", ascending=True)
-        sacrifices = [
-            character
-            for character in owned
-            if character.instance_id != target_instance_id
-            and not character.locked
-            and character.character_key == target.character_key
-            and character.evolution_stage == target.evolution_stage
-        ]
-        if len(sacrifices) < 2:
-            next_stage = target.evolution_stage + 1
-            raise ValueError(
-                f"You need 2 unlocked duplicate copies of this unit at evo {target.evolution_stage} to reach evo {next_stage}."
-            )
+        sacrifice = await self.get_character_instance(player_id, sacrifice_instance_id)
+        if not sacrifice:
+            raise ValueError("The sacrifice card was not found.")
+        if sacrifice.locked:
+            raise ValueError("Unlock the sacrifice card before evolving.")
+        if sacrifice.character_key != target.character_key:
+            raise ValueError("Both cards must be the same character to evolve.")
+        if sacrifice.evolution_stage != target.evolution_stage:
+            raise ValueError("Both cards must be at the same evolution stage.")
+        if sacrifice.level < sacrifice.max_level:
+            raise ValueError(f"{sacrifice.definition.name} must also be at max level before evolving.")
 
-        consumed = sacrifices[:2]
         await self.db.executemany(
             [
                 (
@@ -786,16 +791,13 @@ class GameService:
                         random.randint(-100, 100),
                     ),
                 ),
-                *[
-                    ("DELETE FROM player_characters WHERE player_id = $1 AND id = $2", (player_id, item.instance_id))
-                    for item in consumed
-                ],
+                ("DELETE FROM player_characters WHERE player_id = $1 AND id = $2", (player_id, sacrifice.instance_id)),
             ]
         )
         updated = await self.get_character_instance(player_id, target_instance_id)
         if not updated:
             raise ValueError("Evolution completed but the character could not be reloaded.")
-        return updated, [item.instance_id for item in consumed]
+        return updated, [sacrifice.instance_id]
 
     async def summon(
         self, player_id: int, summon_type: str, amount: int

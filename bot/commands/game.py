@@ -701,26 +701,31 @@ class GameCog(commands.Cog):
 
     @commands.command(
         aliases=["evolve"],
-        help="Evolve a unit by consuming two unlocked duplicate copies at the same evo stage.",
+        help="Evolve a unit by combining two max-level duplicate inventory cards.",
         extras={
             "category": "game",
-            "usage": "y!evo <instance_id>",
-            "examples": ["y!evo 14"],
-            "details": "Consumes two unlocked duplicates of the same character at the same current evo stage. Evolution caps at evo 3.",
+            "usage": "y!evo <inventory_number_1> <inventory_number_2>",
+            "examples": ["y!evo 2 3"],
+            "details": "Uses two inventory numbers from `y!inventory`. Both cards must be the same character, at the same evo stage, and already at max level. The second card is consumed and the first one evolves.",
         },
     )
     @commands.cooldown(1, 3.0, commands.BucketType.user)
-    async def evo(self, ctx: commands.Context, instance_id: int) -> None:
+    async def evo(self, ctx: commands.Context, first_inventory_number: int, second_inventory_number: int) -> None:
         profile = await self.bot.game.get_profile(ctx.author.id)
         if not profile:
             await ctx.send("Use `y!start` first.")
             return
         try:
-            character, consumed_ids = await self.bot.game.evolve_character(profile.player_id, instance_id)
+            target = await self.bot.game.get_inventory_entry_by_position(profile.player_id, first_inventory_number)
+            sacrifice = await self.bot.game.get_inventory_entry_by_position(profile.player_id, second_inventory_number)
+            if not target or not sacrifice:
+                await ctx.send("One of those inventory numbers does not exist.")
+                return
+            character, _ = await self.bot.game.evolve_character(profile.player_id, target.instance_id, sacrifice.instance_id)
         except ValueError as exc:
             await ctx.send(str(exc))
             return
-        await ctx.send(embed=evolution_embed(character, consumed_ids))
+        await ctx.send(embed=evolution_embed(character, [first_inventory_number, second_inventory_number]))
 
     @commands.command(
         aliases=["tm", "squad", "lineup"],
@@ -729,7 +734,7 @@ class GameCog(commands.Cog):
             "category": "game",
             "usage": "y!team [slot1] [slot2] [slot3]",
             "examples": ["y!team", "y!team 1 2 3", "y!team 7 9"],
-            "details": "With no ids it shows your current team. To update the lineup, pass your inventory instance ids from `y!inventory`. Duplicate ids are not allowed.",
+            "details": "With no ids it shows your current team. To update the lineup, pass the visible inventory numbers from `y!inventory`. Duplicate entries are not allowed.",
         },
     )
     @commands.cooldown(1, 4.0, commands.BucketType.user)
@@ -744,18 +749,24 @@ class GameCog(commands.Cog):
             await ctx.send(embed=team_embed(ctx.author, current_team))
             return
 
-        raw_ids = [slot1, slot2, slot3]
-        unique_ids = [value for value in raw_ids if value is not None]
-        if len(set(unique_ids)) != len(unique_ids):
+        raw_positions = [slot1, slot2, slot3]
+        unique_positions = [value for value in raw_positions if value is not None]
+        if len(set(unique_positions)) != len(unique_positions):
             await ctx.send("Each team slot must use a different character.")
             return
 
-        for instance_id in unique_ids:
-            if not await self.bot.game.get_character_instance(profile.player_id, instance_id):
-                await ctx.send(f"Character `#{instance_id}` is not in your inventory.")
+        resolved_ids: list[int | None] = []
+        for inventory_number in raw_positions:
+            if inventory_number is None:
+                resolved_ids.append(None)
+                continue
+            character = await self.bot.game.get_inventory_entry_by_position(profile.player_id, inventory_number)
+            if not character:
+                await ctx.send(f"Inventory no. `{inventory_number}` is not in your inventory.")
                 return
+            resolved_ids.append(character.instance_id)
 
-        await self.bot.game.set_team(profile.player_id, raw_ids)
+        await self.bot.game.set_team(profile.player_id, resolved_ids)
         team = await self.bot.game.get_team(profile.player_id)
         await ctx.send(embed=team_embed(ctx.author, team))
 
@@ -764,23 +775,23 @@ class GameCog(commands.Cog):
         help="Lock or unlock a character in your collection.",
         extras={
             "category": "game",
-            "usage": "y!lock <instance_id>",
+            "usage": "y!lock <inventory_number>",
             "examples": ["y!lock 4"],
             "details": "Locked characters are marked in your inventory and can be kept safe for future systems like auto-merge or auto-sacrifice.",
         },
     )
     @commands.cooldown(1, 2.0, commands.BucketType.user)
-    async def lock(self, ctx: commands.Context, instance_id: int) -> None:
+    async def lock(self, ctx: commands.Context, inventory_number: int) -> None:
         profile = await self.bot.game.get_profile(ctx.author.id)
         if not profile:
             await ctx.send("Use `y!start` first.")
             return
-        character = await self.bot.game.get_character_instance(profile.player_id, instance_id)
+        character = await self.bot.game.get_inventory_entry_by_position(profile.player_id, inventory_number)
         if not character:
             await ctx.send("Character not found.")
             return
-        state = await self.bot.game.toggle_lock(profile.player_id, instance_id)
-        await ctx.send(f"`#{instance_id}` is now {'locked' if state else 'unlocked'}.")
+        state = await self.bot.game.toggle_lock(profile.player_id, character.instance_id)
+        await ctx.send(f"Inventory no. `{inventory_number}` is now {'locked' if state else 'unlocked'}.")
 
     @commands.command(
         aliases=["claim", "dailyreward"],
@@ -810,13 +821,13 @@ class GameCog(commands.Cog):
         help="Upgrade a character's level, skill, grade, or awaken them.",
         extras={
             "category": "game",
-            "usage": "y!upgrade <instance_id> <level|skill|grade|awaken>",
+            "usage": "y!upgrade <inventory_number> <level|skill|grade|awaken>",
             "examples": ["y!upgrade 3 level", "y!upgrade 8 skill", "y!upgrade 12 awaken"],
             "details": "Use materials from battles and dailies to strengthen units. Awakening is only for Special Grade units that meet the requirements.",
         },
     )
     @commands.cooldown(1, 3.0, commands.BucketType.user)
-    async def upgrade(self, ctx: commands.Context, instance_id: int, action: str) -> None:
+    async def upgrade(self, ctx: commands.Context, inventory_number: int, action: str) -> None:
         profile = await self.bot.game.get_profile(ctx.author.id)
         if not profile:
             await ctx.send("Use `y!start` first.")
@@ -826,7 +837,11 @@ class GameCog(commands.Cog):
             await ctx.send("Action must be `level`, `skill`, `grade`, or `awaken`.")
             return
         try:
-            character = await self.bot.game.upgrade_character(profile.player_id, instance_id, action)
+            target = await self.bot.game.get_inventory_entry_by_position(profile.player_id, inventory_number)
+            if not target:
+                await ctx.send("That inventory number does not exist.")
+                return
+            character = await self.bot.game.upgrade_character(profile.player_id, target.instance_id, action)
         except ValueError as exc:
             await ctx.send(str(exc))
             return
