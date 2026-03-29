@@ -9,6 +9,17 @@ from dotenv import load_dotenv
 load_dotenv()
 
 
+def _is_railway_environment() -> bool:
+    railway_markers = (
+        "RAILWAY_ENVIRONMENT",
+        "RAILWAY_PROJECT_ID",
+        "RAILWAY_SERVICE_ID",
+        "RAILWAY_REPLICA_ID",
+        "RAILWAY_STATIC_URL",
+    )
+    return any(os.getenv(marker) for marker in railway_markers)
+
+
 @dataclass(slots=True)
 class Settings:
     discord_token: str
@@ -32,6 +43,11 @@ def get_settings() -> Settings:
         raise RuntimeError("DISCORD_TOKEN is not set")
     if not database_url:
         raise RuntimeError("DATABASE_URL is not set")
+    if _is_railway_environment() and database_url.startswith("sqlite:///"):
+        raise RuntimeError(
+            "Railway deployments cannot use sqlite:/// for DATABASE_URL because the container filesystem is ephemeral. "
+            "Attach a Railway PostgreSQL service and set DATABASE_URL to that Postgres connection string."
+        )
 
     return Settings(
         discord_token=token,

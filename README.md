@@ -55,6 +55,12 @@ python main.py
 
 The bot auto-creates tables and seeds the JJK character catalog on startup.
 
+## Railway Note
+
+If you deploy on Railway, use a Railway PostgreSQL service for `DATABASE_URL`.
+Do not use `sqlite:///...` on Railway, because container storage is ephemeral and your data will be lost on redeploy.
+The repo also includes a `.python-version` file to keep Railway/Nixpacks on Python 3.11.
+
 ## Prefix Commands
 
 - `y!help`
