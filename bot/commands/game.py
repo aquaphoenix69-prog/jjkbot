@@ -101,7 +101,7 @@ class EnhancementConfirmView(discord.ui.View):
 
     async def interaction_check(self, interaction: discord.Interaction) -> bool:
         if interaction.user.id != self.owner_id:
-            await interaction.response.send_message("Only the command author can confirm this enhancement.", ephemeral=True)
+            await interaction.response.send_message("Only the command author can confirm this level feed.", ephemeral=True)
             return False
         return True
 
@@ -118,7 +118,7 @@ class EnhancementConfirmView(discord.ui.View):
         self.confirmed = False
         for item in self.children:
             item.disabled = True
-        await interaction.response.edit_message(content="Enhancement cancelled.", embed=None, view=self)
+        await interaction.response.edit_message(content="Level feed cancelled.", embed=None, view=self)
         self.stop()
 
 
@@ -637,12 +637,12 @@ class GameCog(commands.Cog):
     @commands.command(
         name="enh",
         aliases=["enhlvl"],
-        help="Feed unlocked cards of one rarity into a target card for enhancement levels.",
+        help="Feed unlocked cards of one rarity into a target card for level XP.",
         extras={
             "category": "game",
             "usage": "y!enh <inventory_number> -r <n|r|e|l> [all]",
             "examples": ["y!enh 1 -r r", "y!enh 16 -r n all", "y!enh 3 -r l"],
-            "details": "Uses the numbered position from `y!inventory`. It consumes every unlocked card of the chosen rarity except the target until that unit reaches its enhancement cap, and asks for confirmation first.",
+            "details": "Uses the numbered position from `y!inventory`. It consumes every unlocked card of the chosen rarity except the target until that unit reaches level 100, and asks for confirmation first.",
         },
     )
     @commands.cooldown(1, 3.0, commands.BucketType.user)
@@ -684,7 +684,7 @@ class GameCog(commands.Cog):
         if not confirm_view.confirmed:
             if confirm_view.is_finished():
                 return
-            await message.edit(content="Enhancement timed out.", embed=None, view=None)
+            await message.edit(content="Level feed timed out.", embed=None, view=None)
             return
 
         await message.edit(embed=enhancement_embed(target, preview_count, preview_levels, fodder_rarity, in_progress=True, inventory_number=inventory_number), view=None)

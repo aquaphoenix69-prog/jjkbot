@@ -43,11 +43,11 @@ class GameService:
         "epic": 2,
         "legendary": 3,
     }
-    ENHANCEMENT_XP_BY_RARITY = {
-        "normal": 120,
-        "rare": 240,
-        "epic": 420,
-        "legendary": 700,
+    ENHANCEMENT_LEVEL_XP_BY_RARITY = {
+        "normal": 320,
+        "rare": 650,
+        "epic": 1100,
+        "legendary": 1700,
     }
     LEADERBOARD_STATS: dict[str, dict[str, str]] = {
         "rank": {
@@ -641,8 +641,8 @@ class GameService:
         target = await self.get_character_instance(player_id, target_instance_id)
         if not target:
             raise ValueError("Character instance not found.")
-        if target.enhancement_level >= target.max_enhancement_level:
-            raise ValueError(f"This character is already at the enhancement cap of {target.max_enhancement_level}.")
+        if target.level >= 100:
+            raise ValueError("This character is already level 100.")
 
         normalized_rarity = fodder_rarity.lower().strip()
         if normalized_rarity not in self.RARITY_ORDER:
@@ -665,8 +665,10 @@ class GameService:
             (
                 """
                 UPDATE player_characters
-                SET enhancement_level = $3,
-                    enhancement_xp = $4
+                SET level = $3,
+                    xp = $4,
+                    enhancement_level = 0,
+                    enhancement_xp = 0
                 WHERE player_id = $1 AND id = $2
                 """,
                 (player_id, target_instance_id, new_level, new_xp),
@@ -683,7 +685,7 @@ class GameService:
         updated = await self.get_character_instance(player_id, target_instance_id)
         if not updated:
             raise ValueError("Enhancement completed but the character could not be reloaded.")
-        return updated, consumed_count, new_level - target.enhancement_level
+        return updated, consumed_count, new_level - target.level
 
     async def preview_enhancement(
         self,
@@ -694,8 +696,8 @@ class GameService:
         target = await self.get_character_instance(player_id, target_instance_id)
         if not target:
             raise ValueError("Character instance not found.")
-        if target.enhancement_level >= target.max_enhancement_level:
-            raise ValueError(f"This character is already at the enhancement cap of {target.max_enhancement_level}.")
+        if target.level >= 100:
+            raise ValueError("This character is already level 100.")
 
         normalized_rarity = fodder_rarity.lower().strip()
         if normalized_rarity not in self.RARITY_ORDER:
@@ -735,7 +737,7 @@ class GameService:
                 and character.definition.rarity.lower() == normalized_rarity
             ],
         )
-        return consumed_count, new_level - target.enhancement_level
+        return consumed_count, new_level - target.level
 
     async def evolve_character(self, player_id: int, target_instance_id: int) -> tuple[OwnedCharacter, list[int]]:
         target = await self.get_character_instance(player_id, target_instance_id)
@@ -1143,8 +1145,8 @@ class GameService:
                 raise ValueError("This sorcerer already awakened.")
             if "special grade" not in character.definition.grade.lower():
                 raise ValueError("Only Special Grade units can awaken.")
-            if character.level < 100 or character.grade < 5 or character.enhancement_level < 40 or character.evolution_stage < 3:
-                raise ValueError("Awakening needs level 100, grade 5, enhancement 40, and evo 3.")
+            if character.level < 100 or character.grade < 5 or character.evolution_stage < 3:
+                raise ValueError("Awakening needs level 100, grade 5, and evo 3.")
             if profile.grade_seals < 12 or profile.skill_scrolls < 12 or profile.crystals < 5000 or profile.coins < 2500000:
                 raise ValueError("Awakening needs 12 Grade Seals, 12 Skill Scrolls, 5000 Crystals, and 2500000 Coins.")
             await self.db.executemany(
@@ -1197,22 +1199,43 @@ class GameService:
         target: OwnedCharacter,
         fodder_cards: list[OwnedCharacter],
     ) -> tuple[int, int, int]:
-        level = target.enhancement_level
-        xp = target.enhancement_xp
+        level = target.level
+        xp = target.xp
         consumed = 0
         for fodder in fodder_cards:
-            if level >= target.max_enhancement_level:
+            if level >= 100:
                 break
-            xp += self.ENHANCEMENT_XP_BY_RARITY.get(fodder.definition.rarity.lower(), 60)
+            temp_target = OwnedCharacter(
+                instance_id=target.instance_id,
+                player_id=target.player_id,
+                character_key=target.character_key,
+                level=level,
+                xp=xp,
+                grade=target.grade,
+                skill_level=target.skill_level,
+                enhancement_level=0,
+                enhancement_xp=0,
+                evolution_stage=target.evolution_stage,
+                hp_roll=target.hp_roll,
+                attack_roll=target.attack_roll,
+                defense_roll=target.defense_roll,
+                speed_roll=target.speed_roll,
+                energy_roll=target.energy_roll,
+                hp_bonus=target.hp_bonus,
+                attack_bonus=target.attack_bonus,
+                defense_bonus=target.defense_bonus,
+                speed_bonus=target.speed_bonus,
+                energy_bonus=target.energy_bonus,
+                awakened=target.awakened,
+                locked=target.locked,
+                acquired_at=target.acquired_at,
+                definition=target.definition,
+            )
+            gained_xp = self.ENHANCEMENT_LEVEL_XP_BY_RARITY.get(fodder.definition.rarity.lower(), 180)
+            level, xp = self._apply_level_xp(temp_target, gained_xp)
             consumed += 1
-            while level < target.max_enhancement_level:
-                requirement = int(100 * (1.08 ** max(0, level)))
-                if xp < requirement:
-                    break
-                xp -= requirement
-                level += 1
-            if level >= target.max_enhancement_level:
-                level = target.max_enhancement_level
+            if level >= 100:
+                level = 100
                 xp = 0
                 break
         return level, xp, consumed
@@ -1469,7 +1492,6 @@ class GameService:
                 owned.locked,
                 owned.awakened,
                 owned.evolution_stage,
-                owned.enhancement_level,
                 owned.level,
                 -owned.instance_id,
             ),
@@ -1481,7 +1503,7 @@ class GameService:
             "rarity": lambda owned: (
                 self.RARITY_ORDER.get(owned.definition.rarity.lower(), -1),
                 owned.evolution_stage,
-                owned.enhancement_level,
+                owned.level,
                 owned.power,
                 -owned.instance_id,
             ),
@@ -1491,9 +1513,9 @@ class GameService:
             "speed": lambda owned: (owned.effective_speed, owned.power, -owned.instance_id),
             "energy": lambda owned: (owned.effective_energy, owned.power, -owned.instance_id),
             "power": lambda owned: (owned.power, owned.effective_attack, -owned.instance_id),
-            "level": lambda owned: (owned.level, owned.enhancement_level, owned.power, -owned.instance_id),
-            "enhancement": lambda owned: (owned.enhancement_level, owned.evolution_stage, owned.power, -owned.instance_id),
-            "evolution": lambda owned: (owned.evolution_stage, owned.enhancement_level, owned.power, -owned.instance_id),
+            "level": lambda owned: (owned.level, owned.evolution_stage, owned.power, -owned.instance_id),
+            "enhancement": lambda owned: (owned.level, owned.evolution_stage, owned.power, -owned.instance_id),
+            "evolution": lambda owned: (owned.evolution_stage, owned.level, owned.power, -owned.instance_id),
             "id": lambda owned: owned.instance_id,
             "card": lambda owned: (owned.definition.card_number, -owned.instance_id),
         }

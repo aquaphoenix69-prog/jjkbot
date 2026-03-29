@@ -15,8 +15,6 @@ RARITY_STAT_MULTIPLIER = {
     "epic": 1.12,
     "legendary": 1.2,
 }
-
-
 @dataclass(slots=True)
 class CharacterDefinition:
     key: str
@@ -74,7 +72,7 @@ class OwnedCharacter:
     @property
     def stat_multiplier(self) -> float:
         rarity_bonus = RARITY_STAT_MULTIPLIER.get(self.definition.rarity.lower(), 1.0)
-        return rarity_bonus * (1.0 + self.enhancement_level * 0.025 + self.evolution_stage * 0.18)
+        return rarity_bonus * (1.0 + self.evolution_stage * 0.18)
 
     @property
     def next_level_xp(self) -> int:
@@ -138,12 +136,12 @@ class OwnedCharacter:
 
     @property
     def effective_speed(self) -> int:
-        speed_bonus = 1.0 + self.enhancement_level * 0.01 + self.evolution_stage * 0.05
+        speed_bonus = 1.0 + self.evolution_stage * 0.05
         return int(self.rolled_speed * speed_bonus)
 
     @property
     def effective_energy(self) -> int:
-        energy_bonus = 1.0 + self.enhancement_level * 0.008 + self.evolution_stage * 0.04
+        energy_bonus = 1.0 + self.evolution_stage * 0.04
         return int(self.rolled_energy * energy_bonus)
 
     @property
@@ -155,7 +153,6 @@ class OwnedCharacter:
             + self.level * 6
             + self.skill_level * 10
             + self.grade * 14
-            + self.enhancement_level * 12
             + self.evolution_stage * 65
             + (40 if self.awakened else 0)
         )

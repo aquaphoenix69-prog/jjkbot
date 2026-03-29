@@ -34,6 +34,13 @@ class Fighter:
 
 
 class BattleService:
+    BOSS_DIFFICULTIES = {
+        "normal": {"stamina": 20, "level": 58, "grade": 3, "skill": 5, "evo": 1, "awakened": False, "coins": 1400, "crystals": 40, "grade_seals": 0, "training_scrolls": 2},
+        "rare": {"stamina": 24, "level": 72, "grade": 4, "skill": 7, "evo": 2, "awakened": False, "coins": 2200, "crystals": 65, "grade_seals": 1, "training_scrolls": 3},
+        "epic": {"stamina": 28, "level": 86, "grade": 5, "skill": 8, "evo": 3, "awakened": True, "coins": 3200, "crystals": 95, "grade_seals": 2, "training_scrolls": 4, "skill_scrolls": 1},
+        "legendary": {"stamina": 34, "level": 100, "grade": 5, "skill": 10, "evo": 3, "awakened": True, "coins": 5000, "crystals": 140, "grade_seals": 3, "training_scrolls": 5, "skill_scrolls": 2},
+    }
+
     def __init__(self, game: GameService) -> None:
         self.game = game
         self.enemy_pool = [character for character in CHARACTERS if "boss" in character.banner_tags]
@@ -60,41 +67,55 @@ class BattleService:
             await self.game.reward_player(player_id, rewards)
         return log
 
-    async def run_boss_raid(self, player_id: int) -> BattleLog:
+    async def run_boss_raid(self, player_id: int, difficulty: str = "normal") -> BattleLog:
         team = await self.game.get_team(player_id)
         if not team:
             raise ValueError("Set a team first with /team.")
-        await self.game.spend_stamina(player_id, 25)
+        config = self.BOSS_DIFFICULTIES.get(difficulty.lower())
+        if not config:
+            raise ValueError("Boss difficulty must be normal, rare, epic, or legendary.")
+        await self.game.spend_stamina(player_id, config["stamina"])
 
-        definition = random.choice(self.enemy_pool)
-        boss = OwnedCharacter(
-            instance_id=0,
-            player_id=0,
-            character_key=definition.key,
-            level=75,
-            xp=0,
-            grade=4,
-            skill_level=7,
-            enhancement_level=30,
-            enhancement_xp=0,
-            evolution_stage=2,
-            hp_roll=0,
-            attack_roll=0,
-            defense_roll=0,
-            speed_roll=0,
-            energy_roll=0,
-            hp_bonus=0,
-            attack_bonus=0,
-            defense_bonus=0,
-            speed_bonus=0,
-            energy_bonus=0,
-            awakened=True,
-            locked=False,
-            acquired_at=datetime.utcnow(),
-            definition=definition,
-        )
-        log = self._simulate(self._build_team(team, "Raiders"), self._build_team([boss], "Boss"))
-        log.rewards = {"coins": 1800, "crystals": 80, "grade_seals": 1, "training_scrolls": 2} if log.winner == "Raiders" else {"coins": 600}
+        picks = random.sample(self.enemy_pool, k=min(3, len(self.enemy_pool)))
+        bosses: list[OwnedCharacter] = []
+        for index, definition in enumerate(picks, start=1):
+            bosses.append(
+                OwnedCharacter(
+                    instance_id=index,
+                    player_id=0,
+                    character_key=definition.key,
+                    level=config["level"],
+                    xp=0,
+                    grade=config["grade"],
+                    skill_level=config["skill"],
+                    enhancement_level=0,
+                    enhancement_xp=0,
+                    evolution_stage=config["evo"],
+                    hp_roll=0,
+                    attack_roll=0,
+                    defense_roll=0,
+                    speed_roll=0,
+                    energy_roll=0,
+                    hp_bonus=0,
+                    attack_bonus=0,
+                    defense_bonus=0,
+                    speed_bonus=0,
+                    energy_bonus=0,
+                    awakened=bool(config["awakened"]),
+                    locked=False,
+                    acquired_at=datetime.utcnow(),
+                    definition=definition,
+                )
+            )
+        log = self._simulate(self._build_team(team, "Raiders"), self._build_team(bosses, "Boss"))
+        if log.winner == "Raiders":
+            log.rewards = {
+                key: value
+                for key, value in config.items()
+                if key in {"coins", "crystals", "grade_seals", "training_scrolls", "skill_scrolls"} and value > 0
+            }
+        else:
+            log.rewards = {"coins": max(500, config["coins"] // 4)}
         await self.game.reward_player(player_id, log.rewards)
         return log
 
@@ -131,7 +152,7 @@ class BattleService:
                     xp=0,
                     grade=min(5, 1 + stage // 4),
                     skill_level=min(10, 1 + stage // 5),
-                    enhancement_level=min(40, stage // 2),
+                    enhancement_level=0,
                     enhancement_xp=0,
                     evolution_stage=min(3, stage // 10),
                     hp_roll=0,
@@ -179,7 +200,7 @@ class BattleService:
 
     def _simulate(self, left_team: list[Fighter], right_team: list[Fighter]) -> BattleLog:
         battle_log = BattleLog(winner="Draw")
-        for round_number in range(1, 16):
+        for round_number in range(1, 9):
             order = sorted(
                 [fighter for fighter in left_team + right_team if fighter.alive],
                 key=lambda fighter: (fighter.speed, random.random()),
@@ -286,27 +307,27 @@ class BattleService:
         )
 
     def _perform_action(self, fighter: Fighter, target: Fighter) -> tuple[str, int, str]:
-        critical = random.random() < 0.18
-        base_damage = max(40, fighter.attack - int(target.defense * 0.6))
-        bonus = 1.5 if critical else 1.0
+        critical = random.random() < 0.22
+        base_damage = max(90, int(fighter.attack * 1.15) - int(target.defense * 0.35))
+        bonus = 1.65 if critical else 1.0
         extra = " Critical hit." if critical else ""
 
         if fighter.energy >= 140 and (fighter.awakened or "special grade" in fighter.definition.grade.lower()) and not fighter.domain_used:
             fighter.energy -= 140
             fighter.domain_used = True
-            damage = int(base_damage * (2.1 + fighter.skill_level * 0.08) * bonus)
+            damage = int(base_damage * (2.35 + fighter.skill_level * 0.1) * bonus)
             extra += f" Domain Expansion: {fighter.definition.domain_name}."
             self._apply_status_from_skill(fighter, target)
             return fighter.definition.ultimate_skill, damage, extra
 
-        if fighter.energy >= 60 and random.random() < 0.45:
+        if fighter.energy >= 60 and random.random() < 0.58:
             fighter.energy -= 60
-            damage = int(base_damage * (1.4 + fighter.skill_level * 0.05) * bonus)
+            damage = int(base_damage * (1.6 + fighter.skill_level * 0.07) * bonus)
             self._apply_status_from_skill(fighter, target)
             self._apply_passive(fighter, target, damage)
             return fighter.definition.basic_skill, damage, extra
 
-        fighter.energy = min(fighter.definition.base_energy + 40, fighter.energy + 20)
+        fighter.energy = min(fighter.definition.base_energy + 55, fighter.energy + 28)
         damage = int(base_damage * bonus)
         self._apply_passive(fighter, target, damage)
         return "Cursed Strike", damage, extra

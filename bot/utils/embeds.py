@@ -100,7 +100,7 @@ def inventory_page_embed(
             inventory_number = inventory_serials.get(owned.instance_id, owned.instance_id) if inventory_serials else owned.instance_id
             lines.append(
                 f"`{inventory_number}.` **{owned.definition.name}** [{owned.definition.rarity}]\n"
-                f"`Rarity {owned.definition.rarity}` `Print {owned.instance_id}` `Evo {owned.evolution_stage}` `Enh {owned.enhancement_level}`"
+                f"`Rarity {owned.definition.rarity}` `Print {owned.instance_id}` `Evo {owned.evolution_stage}`"
             )
         chunks = _chunk_inventory_lines(lines)
         for index, chunk in enumerate(chunks, start=1):
@@ -175,7 +175,7 @@ def team_embed(user: discord.abc.User, team: list[OwnedCharacter]) -> discord.Em
                 f"`Inst #{owned.instance_id}` `Card #{owned.definition.card_number}` {owned.definition.name}\n"
                 f"{owned.definition.title}\n"
                 f"Lore Grade: {owned.definition.grade}\n"
-                f"Lv.{owned.level} | Grade {owned.grade} | Skill {owned.skill_level} | Enh {owned.enhancement_level} | Evo {owned.evolution_stage}"
+                f"Lv.{owned.level} | Grade {owned.grade} | Skill {owned.skill_level} | Evo {owned.evolution_stage}"
             ),
             inline=False,
         )
@@ -228,7 +228,6 @@ def upgrade_embed(character: OwnedCharacter, action: str) -> discord.Embed:
             f"Lv.{character.level}\n"
             f"Grade {character.grade}\n"
             f"Skill {character.skill_level}\n"
-            f"Enhancement {character.enhancement_level}\n"
             f"Evolution {character.evolution_stage}\n"
             f"Awakened: {'Yes' if character.awakened else 'No'}"
         ),
@@ -264,23 +263,23 @@ def enhancement_embed(
     inventory_number: int | None = None,
 ) -> discord.Embed:
     if pending:
-        title = f"Confirm enhancement for {character.definition.name}"
+        title = f"Confirm level feed for {character.definition.name}"
         description = (
             f"Inventory No. **{inventory_number}** will use up to **{consumed_count}** unlocked "
-            f"**{fodder_rarity.title()}** card(s) for **+{levels_gained}** enhancement levels.\n"
+            f"**{fodder_rarity.title()}** card(s) for **+{levels_gained}** level(s).\n"
             "Press **Confirm Enhance** to continue."
         )
     elif in_progress:
-        title = f"Enhancing {character.definition.name}..."
+        title = f"Feeding cards into {character.definition.name}..."
         description = (
-            f"Inventory No. **{inventory_number}** is being enhanced with unlocked "
+            f"Inventory No. **{inventory_number}** is gaining level XP from unlocked "
             f"**{fodder_rarity.title()}** cards."
         )
     else:
-        title = f"{character.definition.name} enhanced"
+        title = f"{character.definition.name} leveled up"
         description = (
             f"Inventory No. **{inventory_number}** consumed {consumed_count} unlocked "
-            f"{fodder_rarity.title()} card(s) for +{levels_gained} enhancement levels."
+            f"{fodder_rarity.title()} card(s) for +{levels_gained} level(s)."
         )
     embed = discord.Embed(
         title=title,
@@ -291,7 +290,7 @@ def enhancement_embed(
         name="Current State",
         value=(
             f"Print {character.instance_id}\n"
-            f"Enhancement {character.enhancement_level}\n"
+            f"Level {character.level}\n"
             f"Evolution {character.evolution_stage}\n"
             f"HP {character.effective_hp}\n"
             f"ATK {character.effective_attack}\n"
@@ -312,7 +311,7 @@ def evolution_embed(character: OwnedCharacter, consumed_ids: list[int]) -> disco
     embed.add_field(
         name="Current State",
         value=(
-            f"Enhancement {character.enhancement_level}\n"
+            f"Level {character.level}\n"
             f"Evolution {character.evolution_stage}\n"
             f"HP {character.effective_hp}\n"
             f"ATK {character.effective_attack}\n"
@@ -346,7 +345,6 @@ def card_info_embed(character: OwnedCharacter, inventory_number: int) -> discord
         value=(
             f"Level: **{character.level}**\n"
             f"Skill: **{character.skill_level}**\n"
-            f"Enhancement: **{character.enhancement_level}**\n"
             f"Evolution: **{character.evolution_stage}**\n"
             f"Awakened: **{'Yes' if character.awakened else 'No'}**\n"
             f"Locked: **{'Yes' if character.locked else 'No'}**"

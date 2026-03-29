@@ -19,13 +19,13 @@ class BattleCog(commands.Cog):
         help="Fight a story mission or a boss raid.",
         extras={
             "category": "battle",
-            "usage": "y!battle <story|boss>",
-            "examples": ["y!battle story", "y!battle boss"],
-            "details": "Story battles advance your progression and reward materials. Boss raids are harder and cost more stamina, but their rewards are bigger.",
+            "usage": "y!battle <story|boss> [-r <n|r|e|l>]",
+            "examples": ["y!battle story", "y!battle boss", "y!battle boss -r legendary"],
+            "details": "Story battles advance your progression and reward materials. Boss raids support difficulty from normal to legendary and give bigger rewards at higher difficulty.",
         },
     )
     @commands.cooldown(1, 6.0, commands.BucketType.user)
-    async def battle(self, ctx: commands.Context, mode: str = "story") -> None:
+    async def battle(self, ctx: commands.Context, mode: str = "story", *options: str) -> None:
         profile = await self.bot.game.get_profile(ctx.author.id)
         if not profile:
             await ctx.send("Use `y!start` first.")
@@ -38,8 +38,9 @@ class BattleCog(commands.Cog):
 
         try:
             if mode == "boss":
-                log = await self.bot.battles.run_boss_raid(profile.player_id)
-                title = "Boss Raid Result"
+                difficulty = self._parse_boss_difficulty(list(options))
+                log = await self.bot.battles.run_boss_raid(profile.player_id, difficulty=difficulty)
+                title = f"Boss Raid Result [{difficulty.title()}]"
             else:
                 log = await self.bot.battles.run_story_battle(profile.player_id)
                 title = "Story Battle Result"
@@ -85,25 +86,47 @@ class BattleCog(commands.Cog):
             await ctx.send(embed=battle_embed(title, log))
             return
 
+        message = await ctx.send("Entering battle...")
         first_snapshot = log.snapshots[0]
         image_bytes, image_name = await render_battle_snapshot(first_snapshot)
-        message = await ctx.send(
+        await message.edit(
+            content=None,
             embed=battle_snapshot_embed(title, first_snapshot),
-            file=discord.File(io.BytesIO(image_bytes), filename=image_name),
+            attachments=[discord.File(io.BytesIO(image_bytes), filename=image_name)],
         )
 
-        max_updates = min(len(log.snapshots), 18)
+        max_updates = min(len(log.snapshots), 12)
         selected = log.snapshots[:max_updates]
         for snapshot in selected[1:]:
-            await asyncio.sleep(1.2)
+            await asyncio.sleep(0.65)
             image_bytes, image_name = await render_battle_snapshot(snapshot)
             await message.edit(
                 embed=battle_snapshot_embed(title, snapshot),
                 attachments=[discord.File(io.BytesIO(image_bytes), filename=image_name)],
             )
 
-        await asyncio.sleep(1.0)
-        await message.edit(embed=battle_embed(title, log), attachments=[])
+        await asyncio.sleep(0.45)
+        await message.edit(content=None, embed=battle_embed(title, log), attachments=[])
+
+    def _parse_boss_difficulty(self, options: list[str]) -> str:
+        if not options:
+            return "normal"
+        if len(options) != 2 or options[0].lower().strip() != "-r":
+            raise ValueError("Use `y!battle boss -r <n|r|e|l>`.")
+        aliases = {
+            "n": "normal",
+            "normal": "normal",
+            "r": "rare",
+            "rare": "rare",
+            "e": "epic",
+            "epic": "epic",
+            "l": "legendary",
+            "legendary": "legendary",
+        }
+        difficulty = aliases.get(options[1].lower().strip())
+        if not difficulty:
+            raise ValueError("Boss difficulty must be `normal`, `rare`, `epic`, or `legendary`.")
+        return difficulty
 
     async def cog_command_error(self, ctx: commands.Context, error: commands.CommandError) -> None:
         if isinstance(error, commands.CommandOnCooldown):
