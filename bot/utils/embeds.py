@@ -133,27 +133,20 @@ def summon_summary_embed(
 ) -> discord.Embed:
     summon_data = SUMMON_TYPES[summon_type]
     counts: dict[str, int] = {}
-    featured: list[str] = []
+    grouped: dict[str, int] = {}
     for recruit in recruits:
         rarity = recruit.definition.rarity
         counts[rarity] = counts.get(rarity, 0) + 1
-    sorted_recruits = sorted(
-        recruits,
-        key=lambda owned: (
-            {"legendary": 3, "epic": 2, "rare": 1, "normal": 0}.get(owned.definition.rarity.lower(), -1),
-            owned.power,
-        ),
-        reverse=True,
-    )
-    for recruit in sorted_recruits[:8]:
-        featured.append(
-            f"Print {recruit.instance_id} | {recruit.definition.name} [{recruit.definition.rarity}]"
-        )
+        grouped[recruit.definition.name] = grouped.get(recruit.definition.name, 0) + 1
+    grouped_lines = [
+        f"{count} {name} summoned"
+        for name, count in sorted(grouped.items(), key=lambda item: (-item[1], item[0].lower()))
+    ]
 
     embed = discord.Embed(
         title=f"{user.display_name} used {summon_data['name']} x{len(recruits)}",
         color=discord.Color(summon_data["color"]),
-        description="Large summon completed. Showing a compact summary so the result stays fast and readable.",
+        description="Large summon completed. Showing grouped results for faster output.",
     )
     embed.add_field(
         name="Rarity Summary",
@@ -161,8 +154,8 @@ def summon_summary_embed(
         inline=False,
     )
     embed.add_field(
-        name="Featured Pulls",
-        value="\n".join(featured) or "No featured pulls",
+        name="Summon Results",
+        value="\n".join(grouped_lines[:20]) or "No recruits",
         inline=False,
     )
     embed.add_field(name="Remaining Coins", value=f"{profile.coins:,}", inline=False)
