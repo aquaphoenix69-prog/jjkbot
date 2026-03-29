@@ -470,8 +470,8 @@ class GameCog(commands.Cog):
         return (sort_keys or ["default"]), rarity_filter, ascending
 
     def _parse_enhancement_rarity(self, options: list[str]) -> str:
-        if len(options) != 2 or options[0].lower().strip() != "-r":
-            raise ValueError("Use `y!enh <inventory_number> -r <n|r|e|l>`.")
+        if len(options) not in {2, 3} or options[0].lower().strip() != "-r":
+            raise ValueError("Use `y!enh <inventory_number> -r <n|r|e|l> [all]`.")
         rarity_aliases = {
             "n": "normal",
             "normal": "normal",
@@ -485,6 +485,8 @@ class GameCog(commands.Cog):
         rarity = rarity_aliases.get(options[1].lower().strip())
         if not rarity:
             raise ValueError("Rarity must be `n`, `r`, `e`, `l`, or the full rarity name.")
+        if len(options) == 3 and options[2].lower().strip() != "all":
+            raise ValueError("The optional last argument can only be `all`.")
         return rarity
 
     async def _build_summon_entry(
@@ -634,9 +636,9 @@ class GameCog(commands.Cog):
         help="Feed unlocked cards of one rarity into a target card for enhancement levels.",
         extras={
             "category": "game",
-            "usage": "y!enh <inventory_number> -r <n|r|e|l>",
-            "examples": ["y!enh 1 -r r", "y!enh 3 -r l"],
-            "details": "Uses the numbered position from `y!inventory`. It consumes every unlocked card of the chosen rarity except the target until that unit reaches its enhancement cap, but asks for confirmation first.",
+            "usage": "y!enh <inventory_number> -r <n|r|e|l> [all]",
+            "examples": ["y!enh 1 -r r", "y!enh 16 -r n all", "y!enh 3 -r l"],
+            "details": "Uses the numbered position from `y!inventory`. It consumes every unlocked card of the chosen rarity except the target until that unit reaches its enhancement cap, and asks for confirmation first.",
         },
     )
     @commands.cooldown(1, 3.0, commands.BucketType.user)

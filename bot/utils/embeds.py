@@ -312,7 +312,7 @@ def evolution_embed(character: OwnedCharacter, consumed_ids: list[int]) -> disco
     embed.add_field(
         name="Current State",
         value=(
-            f"Enhancement {character.enhancement_level}/{character.max_enhancement_level}\n"
+            f"Enhancement {character.enhancement_level}\n"
             f"Evolution {character.evolution_stage}\n"
             f"HP {character.effective_hp}\n"
             f"ATK {character.effective_attack}\n"
