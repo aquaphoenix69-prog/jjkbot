@@ -12,6 +12,7 @@ from bot.models.game import CharacterDefinition, OwnedCharacter, PlayerProfile
 class GameService:
     INVENTORY_SORT_LABELS: dict[str, str] = {
         "default": "Default",
+        "name": "Name",
         "rarity": "Rarity",
         "hp": "HP",
         "attack": "Attack",
@@ -226,6 +227,21 @@ class GameService:
             ascending=ascending,
         )
 
+    async def get_inventory_serial_map(self, player_id: int) -> dict[int, int]:
+        records = await self.db.fetch(
+            """
+            SELECT id
+            FROM player_characters
+            WHERE player_id = $1
+            ORDER BY id ASC
+            """,
+            player_id,
+        )
+        return {
+            int(row["id"]): index
+            for index, row in enumerate(records, start=1)
+        }
+
     async def get_character_instance(
         self, player_id: int, instance_id: int
     ) -> OwnedCharacter | None:
@@ -249,9 +265,9 @@ class GameService:
         player_id: int,
         position: int,
         *,
-        sort_key: str = "default",
+        sort_key: str = "id",
         rarity_filter: str | None = None,
-        ascending: bool = False,
+        ascending: bool = True,
     ) -> OwnedCharacter | None:
         if position < 1:
             return None
@@ -917,6 +933,11 @@ class GameService:
             )
 
         sorters = {
+            "name": lambda owned: (
+                owned.definition.name.lower(),
+                owned.definition.rarity.lower(),
+                owned.instance_id,
+            ),
             "rarity": lambda owned: (
                 self.RARITY_ORDER.get(owned.definition.rarity.lower(), -1),
                 owned.evolution_stage,

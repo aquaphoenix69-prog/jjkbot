@@ -336,6 +336,8 @@ class GameCog(commands.Cog):
         ascending = False
         index = 0
         sort_aliases = {
+            "-name": "name",
+            "-names": "name",
             "-hp": "hp",
             "-atk": "attack",
             "-attack": "attack",
@@ -381,7 +383,7 @@ class GameCog(commands.Cog):
                 sort_key = sort_aliases[option]
             else:
                 raise ValueError(
-                    "Unknown inventory option. Use `-r [rarity]`, `-hp`, `-atk`, `-def`, `-spd`, `-energy`, `-power`, `-lvl`, `-enh`, `-evo`, `-id`, `-card`, or `-asc`."
+                    "Unknown inventory option. Use `-r [rarity]`, `-name`, `-hp`, `-atk`, `-def`, `-spd`, `-energy`, `-power`, `-lvl`, `-enh`, `-evo`, `-id`, `-card`, or `-asc`."
                 )
             index += 1
 
@@ -468,9 +470,9 @@ class GameCog(commands.Cog):
         help="Browse every character you own.",
         extras={
             "category": "game",
-            "usage": "y!inventory [-r [rarity]] [-hp|-atk|-def|-spd|-energy|-power|-lvl|-enh|-evo|-id|-card] [-asc]",
-            "examples": ["y!inventory", "y!inv -r", "y!inv -r legendary", "y!inv -atk", "y!inv -power -asc"],
-            "details": "Use `-r` alone to sort by rarity or `-r legendary` to filter to one rarity. Stat flags sort by that stat. `-asc` flips the order.",
+            "usage": "y!inventory [-r [rarity]] [-name|-hp|-atk|-def|-spd|-energy|-power|-lvl|-enh|-evo|-id|-card] [-asc]",
+            "examples": ["y!inventory", "y!inv -r", "y!inv -r l", "y!inv -name", "y!inv -atk", "y!inv -power -asc"],
+            "details": "Use `-r` alone to sort by rarity or `-r l`/`-r legendary` to filter to one rarity. `-name` sorts alphabetically. The visible inventory serial stays tied to the real full inventory order even when filtered.",
         },
     )
     @commands.cooldown(1, 4.0, commands.BucketType.user)
@@ -490,12 +492,14 @@ class GameCog(commands.Cog):
             rarity_filter=rarity_filter,
             ascending=ascending,
         )
+        inventory_serials = await self.bot.game.get_inventory_serial_map(profile.player_id)
         embeds = [
             inventory_page_embed(
                 ctx.author,
                 characters,
                 page,
                 8,
+                inventory_serials=inventory_serials,
                 sort_label=self.bot.game.INVENTORY_SORT_LABELS.get(sort_key, "Default"),
                 rarity_filter=rarity_filter,
             )

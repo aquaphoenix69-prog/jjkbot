@@ -78,6 +78,7 @@ def inventory_page_embed(
     page: int,
     per_page: int,
     *,
+    inventory_serials: dict[int, int] | None = None,
     sort_label: str = "Default",
     rarity_filter: str | None = None,
 ) -> discord.Embed:
@@ -96,7 +97,7 @@ def inventory_page_embed(
     else:
         lines = []
         for owned in page_items:
-            inventory_number = start + len(lines) + 1
+            inventory_number = inventory_serials.get(owned.instance_id, owned.instance_id) if inventory_serials else owned.instance_id
             flags = []
             if owned.locked:
                 flags.append("Lock")
@@ -112,7 +113,7 @@ def inventory_page_embed(
                 "legendary": "L",
             }.get(owned.definition.rarity.lower(), "?")
             lines.append(
-                f"`{inventory_number}.` `#{owned.definition.card_number}` **{owned.definition.name}** [{owned.definition.rarity}] {suffix}\n"
+                f"`{inventory_number}.` `Print {owned.instance_id}` **{owned.definition.name}** [{owned.definition.rarity}] {suffix}\n"
                 f"`{rarity_badge}` | `Lv {owned.level}` | `Print {owned.instance_id}` | `Enh {owned.enhancement_level}/{owned.max_enhancement_level}`\n"
                 f"`HP {owned.effective_hp}` `ATK {owned.effective_attack}` `DEF {owned.effective_defense}` `SPD {owned.effective_speed}`"
             )
