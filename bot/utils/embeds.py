@@ -81,6 +81,7 @@ def inventory_page_embed(
     inventory_serials: dict[int, int] | None = None,
     sort_label: str = "Default",
     rarity_filter: str | None = None,
+    name_filter: str | None = None,
 ) -> discord.Embed:
     total_pages = max(1, (len(characters) + per_page - 1) // per_page)
     page = max(0, min(page, total_pages - 1))
@@ -100,7 +101,7 @@ def inventory_page_embed(
             inventory_number = inventory_serials.get(owned.instance_id, owned.instance_id) if inventory_serials else owned.instance_id
             lines.append(
                 f"`{inventory_number}.` **{owned.definition.name}** [{owned.definition.rarity}]\n"
-                f"`Rarity {owned.definition.rarity}` `Print {owned.instance_id}` `Evo {owned.evolution_stage}`"
+                f"`Lv {owned.level}` `Rarity {owned.definition.rarity}` `Print {owned.instance_id}` `Evo {owned.evolution_stage + 1}`"
             )
         chunks = _chunk_inventory_lines(lines)
         for index, chunk in enumerate(chunks, start=1):
@@ -108,7 +109,12 @@ def inventory_page_embed(
             embed.add_field(name=name, value=chunk, inline=False)
         if page_items[0].definition.image_url:
             embed.set_thumbnail(url=page_items[0].definition.image_url)
-    filter_text = rarity_filter.title() if rarity_filter else "All"
+    filter_parts = []
+    if rarity_filter:
+        filter_parts.append(rarity_filter.title())
+    if name_filter:
+        filter_parts.append(f"Name:{name_filter}")
+    filter_text = " | ".join(filter_parts) if filter_parts else "All"
     embed.set_footer(text=f"Page {page + 1}/{total_pages} | Sort: {sort_label} | Filter: {filter_text}")
     return embed
 
@@ -175,7 +181,7 @@ def team_embed(user: discord.abc.User, team: list[OwnedCharacter]) -> discord.Em
                 f"`Inst #{owned.instance_id}` `Card #{owned.definition.card_number}` {owned.definition.name}\n"
                 f"{owned.definition.title}\n"
                 f"Lore Grade: {owned.definition.grade}\n"
-                f"Lv.{owned.level} | Grade {owned.grade} | Skill {owned.skill_level} | Evo {owned.evolution_stage}"
+                f"Lv.{owned.level} | Grade {owned.grade} | Skill {owned.skill_level} | Evo {owned.evolution_stage + 1}"
             ),
             inline=False,
         )
@@ -228,7 +234,7 @@ def upgrade_embed(character: OwnedCharacter, action: str) -> discord.Embed:
             f"Lv.{character.level}\n"
             f"Grade {character.grade}\n"
             f"Skill {character.skill_level}\n"
-            f"Evolution {character.evolution_stage}\n"
+            f"Evolution {character.evolution_stage + 1}\n"
             f"Awakened: {'Yes' if character.awakened else 'No'}"
         ),
         inline=False,
@@ -291,7 +297,7 @@ def enhancement_embed(
         value=(
             f"Print {character.instance_id}\n"
             f"Level {character.level}\n"
-            f"Evolution {character.evolution_stage}\n"
+            f"Evolution {character.evolution_stage + 1}\n"
             f"HP {character.effective_hp}\n"
             f"ATK {character.effective_attack}\n"
             f"DEF {character.effective_defense}\n"
@@ -306,13 +312,13 @@ def evolution_embed(character: OwnedCharacter, consumed_ids: list[int]) -> disco
     embed = discord.Embed(
         title=f"{character.definition.name} evolved",
         color=discord.Color.dark_gold(),
-        description=f"Evolved to stage {character.evolution_stage}/3 using inventory numbers: {', '.join(str(item) for item in consumed_ids)}",
+        description=f"Evolved to stage {character.evolution_stage + 1}/4 using inventory numbers: {', '.join(str(item) for item in consumed_ids)}",
     )
     embed.add_field(
         name="Current State",
         value=(
             f"Level {character.level}\n"
-            f"Evolution {character.evolution_stage}\n"
+            f"Evolution {character.evolution_stage + 1}\n"
             f"HP {character.effective_hp}\n"
             f"ATK {character.effective_attack}\n"
             f"DEF {character.effective_defense}\n"
@@ -345,7 +351,7 @@ def card_info_embed(character: OwnedCharacter, inventory_number: int) -> discord
         value=(
             f"Level: **{character.level}**\n"
             f"Skill: **{character.skill_level}**\n"
-            f"Evolution: **{character.evolution_stage}**\n"
+            f"Evolution: **{character.evolution_stage + 1}**\n"
             f"Awakened: **{'Yes' if character.awakened else 'No'}**\n"
             f"Locked: **{'Yes' if character.locked else 'No'}**"
         ),
@@ -445,7 +451,7 @@ def _unit_summary(unit) -> str:
     status = ""
     if unit.status:
         status = " [" + ", ".join(name for name, turns in unit.status.items() if turns > 0) + "]"
-    return f"**{unit.name}** Lv.{unit.level} Evo {unit.evolution_stage}\nHP {unit.hp:,}/{unit.max_hp:,} | EN {unit.energy}/{unit.max_energy}{status}"
+    return f"**{unit.name}** Lv.{unit.level} Evo {unit.evolution_stage + 1}\nHP {unit.hp:,}/{unit.max_hp:,} | EN {unit.energy}/{unit.max_energy}{status}"
 
 
 def _rarity_color(rarity: str) -> discord.Color:

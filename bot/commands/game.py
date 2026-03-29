@@ -414,12 +414,14 @@ class GameCog(commands.Cog):
                 return min(int(tail), self.MAX_SUMMON_BATCH)
         return None
 
-    def _parse_inventory_options(self, options: list[str]) -> tuple[list[str], str | None, bool]:
+    def _parse_inventory_options(self, options: list[str]) -> tuple[list[str], str | None, str | None, bool]:
         sort_keys: list[str] = []
         rarity_filter: str | None = None
+        name_filter: str | None = None
         ascending = False
         index = 0
         sort_aliases = {
+            "-n": "name",
             "-name": "name",
             "-names": "name",
             "-hp": "hp",
@@ -463,15 +465,22 @@ class GameCog(commands.Cog):
                     index += 1
                 else:
                     sort_keys.append("rarity")
+            elif option == "-n":
+                next_token = options[index + 1].strip() if index + 1 < len(options) else None
+                if next_token:
+                    name_filter = next_token
+                    index += 1
+                else:
+                    sort_keys.append("name")
             elif option in sort_aliases:
                 sort_keys.append(sort_aliases[option])
             else:
                 raise ValueError(
-                    "Unknown inventory option. Use `-r [rarity]`, `-name`, `-hp`, `-atk`, `-def`, `-spd`, `-energy`, `-power`, `-lvl`, `-enh`, `-evo`, `-id`, `-card`, or `-asc`."
+                    "Unknown inventory option. Use `-r [rarity]`, `-n [name]`, `-name`, `-hp`, `-atk`, `-def`, `-spd`, `-energy`, `-power`, `-lvl`, `-enh`, `-evo`, `-id`, `-card`, or `-asc`."
                 )
             index += 1
 
-        return (sort_keys or ["default"]), rarity_filter, ascending
+        return (sort_keys or ["default"]), rarity_filter, name_filter, ascending
 
     def _parse_enhancement_rarity(self, options: list[str]) -> str:
         if len(options) not in {2, 3} or options[0].lower().strip() != "-r":
@@ -568,7 +577,7 @@ class GameCog(commands.Cog):
             await ctx.send("Use `y!start` first.")
             return
         try:
-            sort_key, rarity_filter, ascending = self._parse_inventory_options(list(options))
+            sort_key, rarity_filter, name_filter, ascending = self._parse_inventory_options(list(options))
         except ValueError as exc:
             await ctx.send(str(exc))
             return
@@ -577,6 +586,7 @@ class GameCog(commands.Cog):
             profile.player_id,
             sort_key=sort_key,
             rarity_filter=rarity_filter,
+            name_filter=name_filter,
             ascending=ascending,
         )
         inventory_serials = await self.bot.game.get_inventory_serial_map(profile.player_id)
@@ -585,13 +595,14 @@ class GameCog(commands.Cog):
                 ctx.author,
                 characters,
                 page,
-                4,
-                inventory_serials=inventory_serials,
-                sort_label=" > ".join(self.bot.game.INVENTORY_SORT_LABELS.get(item, item.title()) for item in sort_key),
-                rarity_filter=rarity_filter,
-            )
-            for page in range(max(1, (len(characters) + 3) // 4))
-        ]
+                  4,
+                  inventory_serials=inventory_serials,
+                  sort_label=" > ".join(self.bot.game.INVENTORY_SORT_LABELS.get(item, item.title()) for item in sort_key),
+                  rarity_filter=rarity_filter,
+                  name_filter=name_filter,
+              )
+              for page in range(max(1, (len(characters) + 3) // 4))
+          ]
         await loading_message.edit(content=None, embed=embeds[0], view=InventoryView(ctx.author.id, embeds))
 
     @commands.command(

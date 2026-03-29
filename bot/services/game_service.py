@@ -492,6 +492,7 @@ class GameService:
         *,
         sort_key: str | list[str] = "default",
         rarity_filter: str | None = None,
+        name_filter: str | None = None,
         ascending: bool = False,
     ) -> list[OwnedCharacter]:
         records = await self.db.fetch(
@@ -512,6 +513,7 @@ class GameService:
             characters,
             sort_key=sort_key,
             rarity_filter=rarity_filter,
+            name_filter=name_filter,
             ascending=ascending,
         )
 
@@ -555,6 +557,7 @@ class GameService:
         *,
         sort_key: str = "id",
         rarity_filter: str | None = None,
+        name_filter: str | None = None,
         ascending: bool = True,
     ) -> OwnedCharacter | None:
         if position < 1:
@@ -563,6 +566,7 @@ class GameService:
             player_id,
             sort_key=sort_key,
             rarity_filter=rarity_filter,
+            name_filter=name_filter,
             ascending=ascending,
         )
         if position > len(characters):
@@ -1493,6 +1497,7 @@ class GameService:
         *,
         sort_key: str | list[str],
         rarity_filter: str | None,
+        name_filter: str | None,
         ascending: bool,
     ) -> list[OwnedCharacter]:
         if rarity_filter:
@@ -1501,6 +1506,13 @@ class GameService:
                 character
                 for character in characters
                 if character.definition.rarity.lower() == normalized_filter
+            ]
+        if name_filter:
+            normalized_name = name_filter.lower().strip()
+            characters = [
+                character
+                for character in characters
+                if normalized_name in character.definition.name.lower()
             ]
 
         sorters = {
