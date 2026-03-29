@@ -566,6 +566,7 @@ class GameCog(commands.Cog):
         except ValueError as exc:
             await ctx.send(str(exc))
             return
+        loading_message = await ctx.send("Loading inventory...")
         characters = await self.bot.game.get_owned_characters(
             profile.player_id,
             sort_key=sort_key,
@@ -585,7 +586,7 @@ class GameCog(commands.Cog):
             )
             for page in range(max(1, (len(characters) + 3) // 4))
         ]
-        await ctx.send(embed=embeds[0], view=InventoryView(ctx.author.id, embeds))
+        await loading_message.edit(content=None, embed=embeds[0], view=InventoryView(ctx.author.id, embeds))
 
     @commands.command(
         aliases=["cardinfo", "invinfo"],

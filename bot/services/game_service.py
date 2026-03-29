@@ -43,10 +43,10 @@ class GameService:
         "legendary": 3,
     }
     ENHANCEMENT_XP_BY_RARITY = {
-        "normal": 60,
-        "rare": 110,
-        "epic": 190,
-        "legendary": 320,
+        "normal": 120,
+        "rare": 240,
+        "epic": 420,
+        "legendary": 700,
     }
     LEADERBOARD_STATS: dict[str, dict[str, str]] = {
         "rank": {
@@ -941,7 +941,7 @@ class GameService:
             xp += self.ENHANCEMENT_XP_BY_RARITY.get(fodder.definition.rarity.lower(), 60)
             consumed += 1
             while level < target.max_enhancement_level:
-                requirement = int(60 * (1.14 ** max(0, level)))
+                requirement = int(100 * (1.08 ** max(0, level)))
                 if xp < requirement:
                     break
                 xp -= requirement

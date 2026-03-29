@@ -100,7 +100,7 @@ def inventory_page_embed(
             inventory_number = inventory_serials.get(owned.instance_id, owned.instance_id) if inventory_serials else owned.instance_id
             lines.append(
                 f"`{inventory_number}.` **{owned.definition.name}** [{owned.definition.rarity}]\n"
-                f"`Rarity {owned.definition.rarity}` `Print {owned.instance_id}` `Evo {owned.evolution_stage}` `Enh {owned.enhancement_level}/{owned.max_enhancement_level}`"
+                f"`Rarity {owned.definition.rarity}` `Print {owned.instance_id}` `Evo {owned.evolution_stage}` `Enh {owned.enhancement_level}`"
             )
         chunks = _chunk_inventory_lines(lines)
         for index, chunk in enumerate(chunks, start=1):
@@ -226,12 +226,10 @@ def upgrade_embed(character: OwnedCharacter, action: str) -> discord.Embed:
         name="Current State",
         value=(
             f"Lv.{character.level}\n"
-            f"XP {character.xp}/{character.next_level_xp if character.level < 100 else 0}\n"
             f"Grade {character.grade}\n"
             f"Skill {character.skill_level}\n"
-            f"Enhancement {character.enhancement_level}/{character.max_enhancement_level}\n"
-            f"Enh XP {character.enhancement_xp}/{character.next_enhancement_xp if character.enhancement_level < character.max_enhancement_level else 0}\n"
-            f"Evolution {character.evolution_stage}/3\n"
+            f"Enhancement {character.enhancement_level}\n"
+            f"Evolution {character.evolution_stage}\n"
             f"Awakened: {'Yes' if character.awakened else 'No'}"
         ),
         inline=False,
@@ -293,9 +291,8 @@ def enhancement_embed(
         name="Current State",
         value=(
             f"Print {character.instance_id}\n"
-            f"Enhancement {character.enhancement_level}/{character.max_enhancement_level}\n"
-            f"Enh XP {character.enhancement_xp}/{character.next_enhancement_xp if character.enhancement_level < character.max_enhancement_level else 0}\n"
-            f"Evolution {character.evolution_stage}/3\n"
+            f"Enhancement {character.enhancement_level}\n"
+            f"Evolution {character.evolution_stage}\n"
             f"HP {character.effective_hp}\n"
             f"ATK {character.effective_attack}\n"
             f"DEF {character.effective_defense}\n"
@@ -316,7 +313,7 @@ def evolution_embed(character: OwnedCharacter, consumed_ids: list[int]) -> disco
         name="Current State",
         value=(
             f"Enhancement {character.enhancement_level}/{character.max_enhancement_level}\n"
-            f"Evolution {character.evolution_stage}/3\n"
+            f"Evolution {character.evolution_stage}\n"
             f"HP {character.effective_hp}\n"
             f"ATK {character.effective_attack}\n"
             f"DEF {character.effective_defense}\n"
@@ -348,11 +345,9 @@ def card_info_embed(character: OwnedCharacter, inventory_number: int) -> discord
         name="Progression",
         value=(
             f"Level: **{character.level}**\n"
-            f"Level XP: **{character.xp}/{character.next_level_xp if character.level < 100 else 0}**\n"
             f"Skill: **{character.skill_level}**\n"
-            f"Enhancement: **{character.enhancement_level}/{character.max_enhancement_level}**\n"
-            f"Enh XP: **{character.enhancement_xp}/{character.next_enhancement_xp if character.enhancement_level < character.max_enhancement_level else 0}**\n"
-            f"Evolution: **{character.evolution_stage}/3**\n"
+            f"Enhancement: **{character.enhancement_level}**\n"
+            f"Evolution: **{character.evolution_stage}**\n"
             f"Awakened: **{'Yes' if character.awakened else 'No'}**\n"
             f"Locked: **{'Yes' if character.locked else 'No'}**"
         ),
