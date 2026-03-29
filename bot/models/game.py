@@ -9,6 +9,12 @@ MAX_ENHANCEMENT_BY_RARITY = {
     "epic": 45,
     "legendary": 60,
 }
+MAX_LEVEL_BY_RARITY = {
+    "normal": 30,
+    "rare": 40,
+    "epic": 50,
+    "legendary": 60,
+}
 RARITY_STAT_MULTIPLIER = {
     "normal": 1.0,
     "rare": 1.06,
@@ -68,6 +74,10 @@ class OwnedCharacter:
     @property
     def max_enhancement_level(self) -> int:
         return MAX_ENHANCEMENT_BY_RARITY.get(self.definition.rarity.lower(), 20)
+
+    @property
+    def max_level(self) -> int:
+        return MAX_LEVEL_BY_RARITY.get(self.definition.rarity.lower(), 30)
 
     @property
     def stat_multiplier(self) -> float:

@@ -641,8 +641,8 @@ class GameService:
         target = await self.get_character_instance(player_id, target_instance_id)
         if not target:
             raise ValueError("Character instance not found.")
-        if target.level >= 100:
-            raise ValueError("This character is already level 100.")
+        if target.level >= target.max_level:
+            raise ValueError(f"This character is already at its level cap of {target.max_level}.")
 
         normalized_rarity = fodder_rarity.lower().strip()
         if normalized_rarity not in self.RARITY_ORDER:
@@ -697,8 +697,8 @@ class GameService:
         target = await self.get_character_instance(player_id, target_instance_id)
         if not target:
             raise ValueError("Character instance not found.")
-        if target.level >= 100:
-            raise ValueError("This character is already level 100.")
+        if target.level >= target.max_level:
+            raise ValueError(f"This character is already at its level cap of {target.max_level}.")
 
         normalized_rarity = fodder_rarity.lower().strip()
         if normalized_rarity not in self.RARITY_ORDER:
@@ -1102,8 +1102,8 @@ class GameService:
         if action == "level":
             if profile.training_scrolls < 1:
                 raise ValueError("You need at least 1 Training Scroll.")
-            if character.level >= 100:
-                raise ValueError("This character is already level 100.")
+            if character.level >= character.max_level:
+                raise ValueError(f"This character is already at its level cap of {character.max_level}.")
             new_level, new_xp = self._apply_level_xp(character, 120)
             await self.db.executemany(
                 [
@@ -1159,8 +1159,8 @@ class GameService:
                 raise ValueError("This sorcerer already awakened.")
             if "special grade" not in character.definition.grade.lower():
                 raise ValueError("Only Special Grade units can awaken.")
-            if character.level < 100 or character.grade < 5 or character.evolution_stage < 3:
-                raise ValueError("Awakening needs level 100, grade 5, and evo 3.")
+            if character.level < character.max_level or character.grade < 5 or character.evolution_stage < 3:
+                raise ValueError(f"Awakening needs max level ({character.max_level}), grade 5, and evo 3.")
             if profile.grade_seals < 12 or profile.skill_scrolls < 12 or profile.crystals < 5000 or profile.coins < 2500000:
                 raise ValueError("Awakening needs 12 Grade Seals, 12 Skill Scrolls, 5000 Crystals, and 2500000 Coins.")
             await self.db.executemany(
@@ -1197,14 +1197,14 @@ class GameService:
     def _apply_level_xp(self, character: OwnedCharacter, gained_xp: int) -> tuple[int, int]:
         level = character.level
         xp = character.xp + gained_xp
-        while level < 100:
+        while level < character.max_level:
             requirement = int(90 * (1.11 ** max(0, level - 1)))
             if xp < requirement:
                 break
             xp -= requirement
             level += 1
-        if level >= 100:
-            level = 100
+        if level >= character.max_level:
+            level = character.max_level
             xp = 0
         return level, xp
 
@@ -1217,7 +1217,7 @@ class GameService:
         xp = target.xp
         consumed = 0
         for fodder in fodder_cards:
-            if level >= 100:
+            if level >= target.max_level:
                 break
             temp_target = OwnedCharacter(
                 instance_id=target.instance_id,
@@ -1248,8 +1248,8 @@ class GameService:
             gained_xp = self.ENHANCEMENT_LEVEL_XP_BY_RARITY.get(fodder.definition.rarity.lower(), 180)
             level, xp = self._apply_level_xp(temp_target, gained_xp)
             consumed += 1
-            if level >= 100:
-                level = 100
+            if level >= target.max_level:
+                level = target.max_level
                 xp = 0
                 break
         return level, xp, consumed
