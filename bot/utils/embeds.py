@@ -100,7 +100,7 @@ def inventory_page_embed(
             inventory_number = inventory_serials.get(owned.instance_id, owned.instance_id) if inventory_serials else owned.instance_id
             lines.append(
                 f"`{inventory_number}.` **{owned.definition.name}** [{owned.definition.rarity}]\n"
-                f"`Print {owned.instance_id}` `Evo {owned.evolution_stage}` `Enh {owned.enhancement_level}/{owned.max_enhancement_level}`"
+                f"`Rarity {owned.definition.rarity}` `Print {owned.instance_id}` `Evo {owned.evolution_stage}` `Enh {owned.enhancement_level}/{owned.max_enhancement_level}`"
             )
         chunks = _chunk_inventory_lines(lines)
         for index, chunk in enumerate(chunks, start=1):
