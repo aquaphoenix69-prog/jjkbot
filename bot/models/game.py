@@ -72,7 +72,7 @@ class OwnedCharacter:
     @property
     def stat_multiplier(self) -> float:
         rarity_bonus = RARITY_STAT_MULTIPLIER.get(self.definition.rarity.lower(), 1.0)
-        return rarity_bonus * (1.0 + self.evolution_stage * 0.18)
+        return rarity_bonus * (1.5 ** self.evolution_stage)
 
     @property
     def next_level_xp(self) -> int:
@@ -136,13 +136,11 @@ class OwnedCharacter:
 
     @property
     def effective_speed(self) -> int:
-        speed_bonus = 1.0 + self.evolution_stage * 0.05
-        return int(self.rolled_speed * speed_bonus)
+        return int(self.rolled_speed * (1.5 ** self.evolution_stage))
 
     @property
     def effective_energy(self) -> int:
-        energy_bonus = 1.0 + self.evolution_stage * 0.04
-        return int(self.rolled_energy * energy_bonus)
+        return int(self.rolled_energy * (1.5 ** self.evolution_stage))
 
     @property
     def power(self) -> int:

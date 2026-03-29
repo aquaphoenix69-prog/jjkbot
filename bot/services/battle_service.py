@@ -200,6 +200,10 @@ class BattleService:
 
     def _simulate(self, left_team: list[Fighter], right_team: list[Fighter]) -> BattleLog:
         battle_log = BattleLog(winner="Draw")
+        attack_counts = {
+            left_team[0].team: 0,
+            right_team[0].team: 0,
+        }
         for round_number in range(1, 9):
             order = sorted(
                 [fighter for fighter in left_team + right_team if fighter.alive],
@@ -224,6 +228,7 @@ class BattleService:
 
                 target = random.choice(living_opponents)
                 action_name, damage, extra = self._perform_action(fighter, target)
+                attack_counts[fighter.team] += 1
                 target.hp = max(0, target.hp - damage)
                 if target.definition.passive == "Infinity":
                     reduced = int(damage * 0.35)
@@ -261,12 +266,15 @@ class BattleService:
                 if self._all_defeated(opponents):
                     battle_log.winner = fighter.team
                     return battle_log
+                if attack_counts[fighter.team] >= 8:
+                    battle_log.rounds.append("Match lasted too long. The battle ends in a draw.")
+                    battle_log.winner = "Draw"
+                    return battle_log
 
             self._tick_statuses(left_team + right_team, battle_log)
 
-        left_alive = sum(1 for fighter in left_team if fighter.alive)
-        right_alive = sum(1 for fighter in right_team if fighter.alive)
-        battle_log.winner = left_team[0].team if left_alive >= right_alive else right_team[0].team
+        battle_log.rounds.append("Match lasted too long. The battle ends in a draw.")
+        battle_log.winner = "Draw"
         return battle_log
 
     def _snapshot(

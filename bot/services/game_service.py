@@ -44,10 +44,10 @@ class GameService:
         "legendary": 3,
     }
     ENHANCEMENT_LEVEL_XP_BY_RARITY = {
-        "normal": 320,
-        "rare": 650,
-        "epic": 1100,
-        "legendary": 1700,
+        "normal": 180,
+        "rare": 420,
+        "epic": 820,
+        "legendary": 1200,
     }
     LEADERBOARD_STATS: dict[str, dict[str, str]] = {
         "rank": {
@@ -478,11 +478,11 @@ class GameService:
             """,
             player_id,
             character_key,
-            random.randint(-100, 100),
-            random.randint(-20, 20),
-            random.randint(-20, 20),
-            random.randint(-20, 20),
-            random.randint(-20, 20),
+            0,
+            0,
+            0,
+            0,
+            0,
         )
         return int(instance_id)
 
@@ -768,10 +768,23 @@ class GameService:
                 (
                     """
                     UPDATE player_characters
-                    SET evolution_stage = evolution_stage + 1
+                    SET evolution_stage = evolution_stage + 1,
+                        hp_roll = $3,
+                        attack_roll = $4,
+                        defense_roll = $5,
+                        speed_roll = $6,
+                        energy_roll = $7
                     WHERE player_id = $1 AND id = $2
                     """,
-                    (player_id, target_instance_id),
+                    (
+                        player_id,
+                        target_instance_id,
+                        random.randint(-1000, 1000),
+                        random.randint(-100, 100),
+                        random.randint(-100, 100),
+                        random.randint(-100, 100),
+                        random.randint(-100, 100),
+                    ),
                 ),
                 *[
                     ("DELETE FROM player_characters WHERE player_id = $1 AND id = $2", (player_id, item.instance_id))
@@ -1185,7 +1198,7 @@ class GameService:
         level = character.level
         xp = character.xp + gained_xp
         while level < 100:
-            requirement = int(100 * (1.18 ** max(0, level - 1)))
+            requirement = int(90 * (1.11 ** max(0, level - 1)))
             if xp < requirement:
                 break
             xp -= requirement
