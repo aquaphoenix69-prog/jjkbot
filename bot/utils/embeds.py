@@ -48,7 +48,7 @@ def summon_embed(
         name="Result",
         value=(
             f"`Card #{character.definition.card_number}` {character.definition.name}\n"
-            f"Inventory ID: `#{character.instance_id}`\n"
+            f"Print: `#{character.instance_id}`\n"
             f"Rarity: {character.definition.rarity}\n"
             f"Sorcerer Grade: {character.definition.grade}\n"
             f"Basic Skill: {character.definition.basic_skill}\n"
@@ -89,7 +89,7 @@ def inventory_page_embed(
     embed = discord.Embed(
         title=f"{user.display_name}'s JJK Collection",
         color=discord.Color.teal(),
-        description="All your owned cards are listed below. Use the instance id for `y!team`, `y!upgrade`, `y!enh`, `y!evo`, and `y!lock`.",
+        description="All your owned cards are listed below. Inventory numbers are for `y!info` and `y!enh`. Prints are the permanent summon serials.",
     )
     if not page_items:
         embed.add_field(name="Collection", value="No characters collected yet.", inline=False)
@@ -113,7 +113,7 @@ def inventory_page_embed(
             }.get(owned.definition.rarity.lower(), "?")
             lines.append(
                 f"`{inventory_number}.` `#{owned.definition.card_number}` **{owned.definition.name}** [{owned.definition.rarity}] {suffix}\n"
-                f"`{rarity_badge}` | `Lv {owned.level}` | `ID {owned.instance_id}` | `Enh {owned.enhancement_level}/{owned.max_enhancement_level}`\n"
+                f"`{rarity_badge}` | `Lv {owned.level}` | `Print {owned.instance_id}` | `Enh {owned.enhancement_level}/{owned.max_enhancement_level}`\n"
                 f"`HP {owned.effective_hp}` `ATK {owned.effective_attack}` `DEF {owned.effective_defense}` `SPD {owned.effective_speed}`"
             )
         embed.add_field(name="Inventory", value="\n\n".join(lines), inline=False)
@@ -217,15 +217,44 @@ def battle_snapshot_embed(title: str, snapshot: BattleSnapshot, winner: str | No
     return embed
 
 
-def enhancement_embed(character: OwnedCharacter, consumed_count: int, levels_gained: int, fodder_rarity: str) -> discord.Embed:
+def enhancement_embed(
+    character: OwnedCharacter,
+    consumed_count: int,
+    levels_gained: int,
+    fodder_rarity: str,
+    *,
+    pending: bool = False,
+    in_progress: bool = False,
+    inventory_number: int | None = None,
+) -> discord.Embed:
+    if pending:
+        title = f"Confirm enhancement for {character.definition.name}"
+        description = (
+            f"Inventory No. **{inventory_number}** will use up to **{consumed_count}** unlocked "
+            f"**{fodder_rarity.title()}** card(s) for **+{levels_gained}** enhancement levels.\n"
+            "Press **Confirm Enhance** to continue."
+        )
+    elif in_progress:
+        title = f"Enhancing {character.definition.name}..."
+        description = (
+            f"Inventory No. **{inventory_number}** is being enhanced with unlocked "
+            f"**{fodder_rarity.title()}** cards."
+        )
+    else:
+        title = f"{character.definition.name} enhanced"
+        description = (
+            f"Inventory No. **{inventory_number}** consumed {consumed_count} unlocked "
+            f"{fodder_rarity.title()} card(s) for +{levels_gained} enhancement levels."
+        )
     embed = discord.Embed(
-        title=f"{character.definition.name} enhanced",
+        title=title,
         color=discord.Color.gold(),
-        description=f"Consumed {consumed_count} unlocked {fodder_rarity.title()} card(s) for +{levels_gained} enhancement levels.",
+        description=description,
     )
     embed.add_field(
         name="Current State",
         value=(
+            f"Print {character.instance_id}\n"
             f"Enhancement {character.enhancement_level}/{character.max_enhancement_level}\n"
             f"Evolution {character.evolution_stage}/3\n"
             f"HP {character.effective_hp}\n"
@@ -270,7 +299,7 @@ def card_info_embed(character: OwnedCharacter, inventory_number: int) -> discord
         value=(
             f"Inventory No: **{inventory_number}**\n"
             f"Card ID: **{character.definition.card_number}**\n"
-            f"Inventory ID: **{character.instance_id}**\n"
+            f"Print: **{character.instance_id}**\n"
             f"Rarity: **{character.definition.rarity}**\n"
             f"Grade: **{character.definition.grade}**"
         ),

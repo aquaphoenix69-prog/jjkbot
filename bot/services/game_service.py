@@ -381,6 +381,37 @@ class GameService:
             raise ValueError("Enhancement completed but the character could not be reloaded.")
         return updated, len(chosen), new_level - target.enhancement_level
 
+    async def preview_enhancement(
+        self,
+        player_id: int,
+        target_instance_id: int,
+        fodder_rarity: str,
+    ) -> tuple[int, int]:
+        target = await self.get_character_instance(player_id, target_instance_id)
+        if not target:
+            raise ValueError("Character instance not found.")
+        if target.enhancement_level >= target.max_enhancement_level:
+            raise ValueError(f"This character is already at the enhancement cap of {target.max_enhancement_level}.")
+
+        normalized_rarity = fodder_rarity.lower().strip()
+        if normalized_rarity not in self.RARITY_ORDER:
+            raise ValueError("Rarity must be `normal`, `rare`, `epic`, or `legendary`.")
+
+        owned = await self.get_owned_characters(player_id, sort_key="id", ascending=True)
+        usable_count = sum(
+            1
+            for character in owned
+            if character.instance_id != target_instance_id
+            and not character.locked
+            and character.definition.rarity.lower() == normalized_rarity
+        )
+        if usable_count < 1:
+            raise ValueError(f"You do not have any unlocked {normalized_rarity.title()} cards to use.")
+
+        levels_needed = target.max_enhancement_level - target.enhancement_level
+        levels_gained = min(levels_needed, usable_count)
+        return usable_count if usable_count < levels_needed else levels_needed, levels_gained
+
     async def evolve_character(self, player_id: int, target_instance_id: int) -> tuple[OwnedCharacter, list[int]]:
         target = await self.get_character_instance(player_id, target_instance_id)
         if not target:

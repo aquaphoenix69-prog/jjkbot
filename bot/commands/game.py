@@ -81,6 +81,45 @@ class SummonResultView(discord.ui.View):
         await interaction.response.edit_message(embed=embed, attachments=attachments, view=self)
 
 
+class EnhancementConfirmView(discord.ui.View):
+    def __init__(
+        self,
+        owner_id: int,
+        *,
+        inventory_number: int,
+        target_instance_id: int,
+        fodder_rarity: str,
+    ) -> None:
+        super().__init__(timeout=60)
+        self.owner_id = owner_id
+        self.inventory_number = inventory_number
+        self.target_instance_id = target_instance_id
+        self.fodder_rarity = fodder_rarity
+        self.confirmed = False
+
+    async def interaction_check(self, interaction: discord.Interaction) -> bool:
+        if interaction.user.id != self.owner_id:
+            await interaction.response.send_message("Only the command author can confirm this enhancement.", ephemeral=True)
+            return False
+        return True
+
+    @discord.ui.button(label="Confirm Enhance", style=discord.ButtonStyle.danger)
+    async def confirm(self, interaction: discord.Interaction, _: discord.ui.Button) -> None:
+        self.confirmed = True
+        for item in self.children:
+            item.disabled = True
+        await interaction.response.edit_message(view=self)
+        self.stop()
+
+    @discord.ui.button(label="Cancel", style=discord.ButtonStyle.secondary)
+    async def cancel(self, interaction: discord.Interaction, _: discord.ui.Button) -> None:
+        self.confirmed = False
+        for item in self.children:
+            item.disabled = True
+        await interaction.response.edit_message(content="Enhancement cancelled.", embed=None, view=self)
+        self.stop()
+
+
 class GameCog(commands.Cog):
     def __init__(self, bot: commands.Bot) -> None:
         self.bot = bot
@@ -316,7 +355,16 @@ class GameCog(commands.Cog):
             "-id": "id",
             "-card": "card",
         }
-        valid_rarities = {"normal", "rare", "epic", "legendary"}
+        rarity_aliases = {
+            "n": "normal",
+            "normal": "normal",
+            "r": "rare",
+            "rare": "rare",
+            "e": "epic",
+            "epic": "epic",
+            "l": "legendary",
+            "legendary": "legendary",
+        }
 
         while index < len(options):
             option = options[index].lower().strip()
@@ -324,8 +372,8 @@ class GameCog(commands.Cog):
                 ascending = True
             elif option == "-r":
                 next_token = options[index + 1].lower().strip() if index + 1 < len(options) else None
-                if next_token in valid_rarities:
-                    rarity_filter = next_token
+                if next_token in rarity_aliases:
+                    rarity_filter = rarity_aliases[next_token]
                     index += 1
                 else:
                     sort_key = "rarity"
@@ -341,10 +389,20 @@ class GameCog(commands.Cog):
 
     def _parse_enhancement_rarity(self, options: list[str]) -> str:
         if len(options) != 2 or options[0].lower().strip() != "-r":
-            raise ValueError("Use `y!enh <instance_id> -r <normal|rare|epic|legendary>`.")
-        rarity = options[1].lower().strip()
-        if rarity not in {"normal", "rare", "epic", "legendary"}:
-            raise ValueError("Rarity must be `normal`, `rare`, `epic`, or `legendary`.")
+            raise ValueError("Use `y!enh <inventory_number> -r <n|r|e|l>`.")
+        rarity_aliases = {
+            "n": "normal",
+            "normal": "normal",
+            "r": "rare",
+            "rare": "rare",
+            "e": "epic",
+            "epic": "epic",
+            "l": "legendary",
+            "legendary": "legendary",
+        }
+        rarity = rarity_aliases.get(options[1].lower().strip())
+        if not rarity:
+            raise ValueError("Rarity must be `n`, `r`, `e`, `l`, or the full rarity name.")
         return rarity
 
     async def _build_summon_entry(
@@ -491,28 +549,64 @@ class GameCog(commands.Cog):
         help="Feed unlocked cards of one rarity into a target card for enhancement levels.",
         extras={
             "category": "game",
-            "usage": "y!enh <instance_id> -r <normal|rare|epic|legendary>",
-            "examples": ["y!enh 14 -r rare", "y!enh 3 -r legendary"],
-            "details": "Consumes every unlocked card of the chosen rarity except the target until that unit reaches its rarity enhancement cap. Locked cards are never consumed.",
+            "usage": "y!enh <inventory_number> -r <n|r|e|l>",
+            "examples": ["y!enh 1 -r r", "y!enh 3 -r l"],
+            "details": "Uses the numbered position from `y!inventory`. It consumes every unlocked card of the chosen rarity except the target until that unit reaches its enhancement cap, but asks for confirmation first.",
         },
     )
     @commands.cooldown(1, 3.0, commands.BucketType.user)
-    async def enh(self, ctx: commands.Context, instance_id: int, *options: str) -> None:
+    async def enh(self, ctx: commands.Context, inventory_number: int, *options: str) -> None:
         profile = await self.bot.game.get_profile(ctx.author.id)
         if not profile:
             await ctx.send("Use `y!start` first.")
             return
         try:
             fodder_rarity = self._parse_enhancement_rarity(list(options))
-            character, consumed_count, levels_gained = await self.bot.game.enhance_character(
+            target = await self.bot.game.get_inventory_entry_by_position(profile.player_id, inventory_number)
+            if not target:
+                await ctx.send("That inventory number does not exist.")
+                return
+            preview_count, preview_levels = await self.bot.game.preview_enhancement(
                 profile.player_id,
-                instance_id,
+                target.instance_id,
                 fodder_rarity,
             )
         except ValueError as exc:
             await ctx.send(str(exc))
             return
-        await ctx.send(embed=enhancement_embed(character, consumed_count, levels_gained, fodder_rarity))
+        confirm_view = EnhancementConfirmView(
+            ctx.author.id,
+            inventory_number=inventory_number,
+            target_instance_id=target.instance_id,
+            fodder_rarity=fodder_rarity,
+        )
+        preview_embed = enhancement_embed(
+            target,
+            preview_count,
+            preview_levels,
+            fodder_rarity,
+            pending=True,
+            inventory_number=inventory_number,
+        )
+        message = await ctx.send(embed=preview_embed, view=confirm_view)
+        await confirm_view.wait()
+        if not confirm_view.confirmed:
+            if confirm_view.is_finished():
+                return
+            await message.edit(content="Enhancement timed out.", embed=None, view=None)
+            return
+
+        await message.edit(embed=enhancement_embed(target, preview_count, preview_levels, fodder_rarity, in_progress=True, inventory_number=inventory_number), view=None)
+        try:
+            character, consumed_count, levels_gained = await self.bot.game.enhance_character(
+                profile.player_id,
+                target.instance_id,
+                fodder_rarity,
+            )
+        except ValueError as exc:
+            await message.edit(content=str(exc), embed=None, view=None)
+            return
+        await message.edit(embed=enhancement_embed(character, consumed_count, levels_gained, fodder_rarity, inventory_number=inventory_number), content=None, view=None)
 
     @commands.command(
         aliases=["evolve"],
