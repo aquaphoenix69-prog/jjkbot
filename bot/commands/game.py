@@ -123,7 +123,7 @@ class EnhancementConfirmView(discord.ui.View):
 
 
 class GameCog(commands.Cog):
-    MAX_SUMMON_BATCH = 100
+    MAX_SUMMON_BATCH = 1000
 
     def __init__(self, bot: commands.Bot) -> None:
         self.bot = bot
@@ -349,7 +349,7 @@ class GameCog(commands.Cog):
             "category": "game",
             "usage": "y!summon <normal|rare|epic|legendary> [1|n-x|all]",
             "examples": ["y!summon normal", "y!summon rare n-3", "y!summon legendary n-10", "y!summon epic all"],
-            "details": "Summon cost is paid in coins. Costs are normal 100, rare 2000, epic 100000, legendary 500000. Use `n-x` to multi-summon x times, or `all` to spend all possible coins on that summon type.",
+            "details": "Summon cost is paid in coins. Costs are normal 100, rare 2000, epic 100000, legendary 500000. Use `n-x` to multi-summon x times, or `all` to spend all possible coins on that summon type, up to 1000 pulls per command.",
         },
     )
     @commands.cooldown(1, 5.0, commands.BucketType.user)
