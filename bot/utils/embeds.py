@@ -98,25 +98,9 @@ def inventory_page_embed(
         lines = []
         for owned in page_items:
             inventory_number = inventory_serials.get(owned.instance_id, owned.instance_id) if inventory_serials else owned.instance_id
-            flags = []
-            if owned.locked:
-                flags.append("Lock")
-            if owned.awakened:
-                flags.append("Awakened")
-            if owned.evolution_stage:
-                flags.append(f"Evo {owned.evolution_stage}")
-            suffix = f" ({', '.join(flags)})" if flags else ""
-            rarity_badge = {
-                "normal": "N",
-                "rare": "R",
-                "epic": "E",
-                "legendary": "L",
-            }.get(owned.definition.rarity.lower(), "?")
             lines.append(
-                f"`{inventory_number}.` `Print {owned.instance_id}` **{owned.definition.name}** [{owned.definition.rarity}] {suffix}\n"
-                f"`{rarity_badge}` | `Lv {owned.level}` | `Print {owned.instance_id}` | `Enh {owned.enhancement_level}/{owned.max_enhancement_level}`\n"
-                f"`HP {owned.effective_hp}` `ATK {owned.effective_attack}` `DEF {owned.effective_defense}` `SPD {owned.effective_speed}`\n"
-                f"`XP {owned.xp}/{owned.next_level_xp if owned.level < 100 else 0}` `Enh XP {owned.enhancement_xp}/{owned.next_enhancement_xp if owned.enhancement_level < owned.max_enhancement_level else 0}`"
+                f"`{inventory_number}.` **{owned.definition.name}** [{owned.definition.rarity}]\n"
+                f"`Print {owned.instance_id}` `Evo {owned.evolution_stage}` `Enh {owned.enhancement_level}/{owned.max_enhancement_level}`"
             )
         chunks = _chunk_inventory_lines(lines)
         for index, chunk in enumerate(chunks, start=1):
