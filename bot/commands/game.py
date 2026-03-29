@@ -17,6 +17,7 @@ from bot.utils.embeds import (
     leaderboard_embed,
     profile_embed,
     resource_embed,
+    story_progress_values,
     summon_embed,
     summon_summary_embed,
     team_embed,
@@ -131,7 +132,7 @@ class GameCog(commands.Cog):
         self.help_categories = {
             "profile": {
                 "description": "Account setup, progression overview, streaks, and ranking.",
-                "commands": ["start", "profile", "coins", "crystals", "stamina", "materials", "daily", "leaderboard", "ping"],
+                "commands": ["start", "profile", "coins", "crystals", "stamina", "materials", "world", "level", "daily", "leaderboard", "ping"],
             },
             "game": {
                 "description": "Collection management, summoning, teams, and upgrades.",
@@ -268,6 +269,42 @@ class GameCog(commands.Cog):
             await ctx.send("Use `y!start` first.")
             return
         await ctx.send(embed=profile_embed(ctx.author, profile))
+
+    @commands.command(
+        aliases=["stageworld", "storyworld"],
+        help="Show your current story world.",
+        extras={
+            "category": "profile",
+            "usage": "y!world",
+            "examples": ["y!world"],
+            "details": "Shows which story world you are currently on.",
+        },
+    )
+    async def world(self, ctx: commands.Context) -> None:
+        profile = await self.bot.game.get_profile(ctx.author.id)
+        if not profile:
+            await ctx.send("Use `y!start` first.")
+            return
+        world, level = story_progress_values(profile.story_stage)
+        await ctx.send(embed=resource_embed(ctx.author, "World", f"World {world}\nCurrent Level {level}", discord.Color.teal()))
+
+    @commands.command(
+        aliases=["stage", "storylevel"],
+        help="Show your current story level inside the world.",
+        extras={
+            "category": "profile",
+            "usage": "y!level",
+            "examples": ["y!level"],
+            "details": "Shows your current story level inside the current world.",
+        },
+    )
+    async def level(self, ctx: commands.Context) -> None:
+        profile = await self.bot.game.get_profile(ctx.author.id)
+        if not profile:
+            await ctx.send("Use `y!start` first.")
+            return
+        world, level = story_progress_values(profile.story_stage)
+        await ctx.send(embed=resource_embed(ctx.author, "Level", f"World {world}\nLevel {level}", discord.Color.blurple()))
 
     @commands.command(
         aliases=["c", "money", "bal"],

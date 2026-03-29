@@ -2,11 +2,19 @@ from __future__ import annotations
 
 import discord
 
+from bot.data.characters import CHARACTERS
 from bot.data.characters import SUMMON_TYPES
 from bot.models.game import BattleLog, BattleSnapshot, CharacterDefinition, OwnedCharacter, PlayerProfile
 
 
+def story_progress_values(story_stage: int) -> tuple[int, int]:
+    pool_size = max(1, len([character for character in CHARACTERS if "boss" not in character.banner_tags]))
+    stage_index = max(0, story_stage - 1)
+    return stage_index // pool_size + 1, stage_index % pool_size + 1
+
+
 def profile_embed(user: discord.abc.User, profile: PlayerProfile) -> discord.Embed:
+    world, level = story_progress_values(profile.story_stage)
     embed = discord.Embed(
         title=f"{user.display_name}'s Sorcerer Profile",
         color=discord.Color.dark_teal(),
@@ -17,6 +25,7 @@ def profile_embed(user: discord.abc.User, profile: PlayerProfile) -> discord.Emb
     embed.add_field(name="Daily Streak", value=str(profile.daily_streak), inline=True)
     embed.add_field(name="Rank Points", value=str(profile.rank_points), inline=True)
     embed.add_field(name="Crystals", value=f"{profile.crystals:,}", inline=True)
+    embed.add_field(name="Story", value=f"World {world} | Level {level}", inline=True)
     embed.add_field(
         name="Materials",
         value=(
@@ -26,7 +35,7 @@ def profile_embed(user: discord.abc.User, profile: PlayerProfile) -> discord.Emb
         ),
         inline=False,
     )
-    embed.set_footer(text=f"Story Stage {profile.story_stage}")
+    embed.set_footer(text=f"Story Stage {profile.story_stage} | World {world} | Level {level}")
     return embed
 
 

@@ -44,6 +44,7 @@ class BattleService:
     def __init__(self, game: GameService) -> None:
         self.game = game
         self.enemy_pool = [character for character in CHARACTERS if "boss" in character.banner_tags]
+        self.story_pool = [character for character in CHARACTERS if "boss" not in character.banner_tags]
 
     async def run_story_battle(self, player_id: int) -> BattleLog:
         team = await self.game.get_team(player_id)
@@ -52,18 +53,21 @@ class BattleService:
         profile = await self.game.get_profile_by_player_id(player_id)
         await self.game.spend_stamina(player_id, 15)
 
-        enemies = self._generate_story_enemies(profile.story_stage)
-        log = self._simulate(self._build_team(team, "Allies"), self._build_team(enemies, "Curses"))
+        story_fighter = [team[0]]
+        enemies = [self._generate_story_enemy(profile.story_stage)]
+        log = self._simulate(self._build_team(story_fighter, "Allies"), self._build_team(enemies, "Boss"))
         if log.winner == "Allies":
+            world, level_in_world, enemy_name = self.story_progress(profile.story_stage)
             rewards = {
-                "coins": 450 + profile.story_stage * 90,
-                "crystals": 20 if profile.story_stage % 3 == 0 else 10,
+                "coins": 350 + world * 180 + level_in_world * 40,
+                "crystals": 10 + world * 5,
                 "training_scrolls": 1,
-                "skill_scrolls": 1 if profile.story_stage % 5 == 0 else 0,
-                "grade_seals": 1 if profile.story_stage % 8 == 0 else 0,
+                "skill_scrolls": 1 if level_in_world % 6 == 0 else 0,
+                "grade_seals": 1 if level_in_world == len(self.story_pool) else 0,
                 "story_stage": 1,
             }
             log.rewards = rewards
+            log.rounds.insert(0, f"Cleared World {world} - Level {level_in_world} against {enemy_name}.")
             await self.game.reward_player(player_id, rewards)
         return log
 
@@ -139,39 +143,43 @@ class BattleService:
         battle_log.rewards = {"rank_points": 25 if attacker_won else -18}
         return battle_log
 
-    def _generate_story_enemies(self, stage: int) -> list[OwnedCharacter]:
-        picks = random.sample(self.enemy_pool, k=min(3, len(self.enemy_pool)))
-        enemies: list[OwnedCharacter] = []
-        for index, definition in enumerate(picks, start=1):
-            enemies.append(
-                OwnedCharacter(
-                    instance_id=index,
-                    player_id=0,
-                    character_key=definition.key,
-                    level=min(90, 5 + stage * 3),
-                    xp=0,
-                    grade=min(5, 1 + stage // 4),
-                    skill_level=min(10, 1 + stage // 5),
-                    enhancement_level=0,
-                    enhancement_xp=0,
-                    evolution_stage=min(3, stage // 10),
-                    hp_roll=0,
-                    attack_roll=0,
-                    defense_roll=0,
-                    speed_roll=0,
-                    energy_roll=0,
-                    hp_bonus=0,
-                    attack_bonus=0,
-                    defense_bonus=0,
-                    speed_bonus=0,
-                    energy_bonus=0,
-                    awakened=stage >= 12,
-                    locked=False,
-                    acquired_at=datetime.utcnow(),
-                    definition=definition,
-                )
-            )
-        return enemies
+    def story_progress(self, stage: int) -> tuple[int, int, str]:
+        pool_size = max(1, len(self.story_pool))
+        stage_index = max(0, stage - 1)
+        world = stage_index // pool_size + 1
+        level_in_world = stage_index % pool_size + 1
+        enemy = self.story_pool[level_in_world - 1]
+        return world, level_in_world, enemy.name
+
+    def _generate_story_enemy(self, stage: int) -> OwnedCharacter:
+        world, level_in_world, _ = self.story_progress(stage)
+        definition = self.story_pool[level_in_world - 1]
+        return OwnedCharacter(
+            instance_id=1,
+            player_id=0,
+            character_key=definition.key,
+            level=min(100, 8 + world * 6 + level_in_world),
+            xp=0,
+            grade=min(5, 1 + max(0, world - 1)),
+            skill_level=min(10, 2 + world),
+            enhancement_level=0,
+            enhancement_xp=0,
+            evolution_stage=min(3, max(0, world - 1)),
+            hp_roll=0,
+            attack_roll=0,
+            defense_roll=0,
+            speed_roll=0,
+            energy_roll=0,
+            hp_bonus=0,
+            attack_bonus=0,
+            defense_bonus=0,
+            speed_bonus=0,
+            energy_bonus=0,
+            awakened=world >= 4,
+            locked=False,
+            acquired_at=datetime.utcnow(),
+            definition=definition,
+        )
 
     def _build_team(self, team: list[OwnedCharacter], label: str) -> list[Fighter]:
         fighters: list[Fighter] = []

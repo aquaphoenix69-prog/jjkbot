@@ -88,24 +88,35 @@ class BattleCog(commands.Cog):
 
         message = await ctx.send("Entering battle...")
         first_snapshot = log.snapshots[0]
-        image_bytes, image_name = await render_battle_snapshot(first_snapshot)
-        await message.edit(
-            content=None,
-            embed=battle_snapshot_embed(title, first_snapshot),
-            attachments=[discord.File(io.BytesIO(image_bytes), filename=image_name)],
-        )
+        visuals_enabled = True
+        try:
+            image_bytes, image_name = await asyncio.wait_for(render_battle_snapshot(first_snapshot), timeout=6.0)
+            await message.edit(
+                content=None,
+                embed=battle_snapshot_embed(title, first_snapshot),
+                attachments=[discord.File(io.BytesIO(image_bytes), filename=image_name)],
+            )
+        except Exception:
+            visuals_enabled = False
+            await message.edit(content=None, embed=battle_snapshot_embed(title, first_snapshot), attachments=[])
 
         max_updates = min(len(log.snapshots), 12)
         selected = log.snapshots[:max_updates]
         for snapshot in selected[1:]:
-            await asyncio.sleep(0.65)
-            image_bytes, image_name = await render_battle_snapshot(snapshot)
-            await message.edit(
-                embed=battle_snapshot_embed(title, snapshot),
-                attachments=[discord.File(io.BytesIO(image_bytes), filename=image_name)],
-            )
+            await asyncio.sleep(0.5)
+            if visuals_enabled:
+                try:
+                    image_bytes, image_name = await asyncio.wait_for(render_battle_snapshot(snapshot), timeout=4.0)
+                    await message.edit(
+                        embed=battle_snapshot_embed(title, snapshot),
+                        attachments=[discord.File(io.BytesIO(image_bytes), filename=image_name)],
+                    )
+                    continue
+                except Exception:
+                    visuals_enabled = False
+            await message.edit(embed=battle_snapshot_embed(title, snapshot), attachments=[])
 
-        await asyncio.sleep(0.45)
+        await asyncio.sleep(0.35)
         await message.edit(content=None, embed=battle_embed(title, log), attachments=[])
 
     def _parse_boss_difficulty(self, options: list[str]) -> str:
