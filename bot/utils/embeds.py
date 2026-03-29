@@ -115,7 +115,8 @@ def inventory_page_embed(
             lines.append(
                 f"`{inventory_number}.` `Print {owned.instance_id}` **{owned.definition.name}** [{owned.definition.rarity}] {suffix}\n"
                 f"`{rarity_badge}` | `Lv {owned.level}` | `Print {owned.instance_id}` | `Enh {owned.enhancement_level}/{owned.max_enhancement_level}`\n"
-                f"`HP {owned.effective_hp}` `ATK {owned.effective_attack}` `DEF {owned.effective_defense}` `SPD {owned.effective_speed}`"
+                f"`HP {owned.effective_hp}` `ATK {owned.effective_attack}` `DEF {owned.effective_defense}` `SPD {owned.effective_speed}`\n"
+                f"`XP {owned.xp}/{owned.next_level_xp if owned.level < 100 else 0}` `Enh XP {owned.enhancement_xp}/{owned.next_enhancement_xp if owned.enhancement_level < owned.max_enhancement_level else 0}`"
             )
         embed.add_field(name="Inventory", value="\n\n".join(lines), inline=False)
         if page_items[0].definition.image_url:
@@ -238,9 +239,11 @@ def upgrade_embed(character: OwnedCharacter, action: str) -> discord.Embed:
         name="Current State",
         value=(
             f"Lv.{character.level}\n"
+            f"XP {character.xp}/{character.next_level_xp if character.level < 100 else 0}\n"
             f"Grade {character.grade}\n"
             f"Skill {character.skill_level}\n"
             f"Enhancement {character.enhancement_level}/{character.max_enhancement_level}\n"
+            f"Enh XP {character.enhancement_xp}/{character.next_enhancement_xp if character.enhancement_level < character.max_enhancement_level else 0}\n"
             f"Evolution {character.evolution_stage}/3\n"
             f"Awakened: {'Yes' if character.awakened else 'No'}"
         ),
@@ -304,6 +307,7 @@ def enhancement_embed(
         value=(
             f"Print {character.instance_id}\n"
             f"Enhancement {character.enhancement_level}/{character.max_enhancement_level}\n"
+            f"Enh XP {character.enhancement_xp}/{character.next_enhancement_xp if character.enhancement_level < character.max_enhancement_level else 0}\n"
             f"Evolution {character.evolution_stage}/3\n"
             f"HP {character.effective_hp}\n"
             f"ATK {character.effective_attack}\n"
@@ -357,8 +361,10 @@ def card_info_embed(character: OwnedCharacter, inventory_number: int) -> discord
         name="Progression",
         value=(
             f"Level: **{character.level}**\n"
+            f"Level XP: **{character.xp}/{character.next_level_xp if character.level < 100 else 0}**\n"
             f"Skill: **{character.skill_level}**\n"
             f"Enhancement: **{character.enhancement_level}/{character.max_enhancement_level}**\n"
+            f"Enh XP: **{character.enhancement_xp}/{character.next_enhancement_xp if character.enhancement_level < character.max_enhancement_level else 0}**\n"
             f"Evolution: **{character.evolution_stage}/3**\n"
             f"Awakened: **{'Yes' if character.awakened else 'No'}**\n"
             f"Locked: **{'Yes' if character.locked else 'No'}**"

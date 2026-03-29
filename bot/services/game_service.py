@@ -42,6 +42,12 @@ class GameService:
         "epic": 2,
         "legendary": 3,
     }
+    ENHANCEMENT_XP_BY_RARITY = {
+        "normal": 60,
+        "rare": 110,
+        "epic": 190,
+        "legendary": 320,
+    }
     LEADERBOARD_STATS: dict[str, dict[str, str]] = {
         "rank": {
             "column": "rank_points",
@@ -211,10 +217,10 @@ class GameService:
             player_id,
             character_key,
             random.randint(-100, 100),
-            random.randint(-100, 100),
-            random.randint(-100, 100),
-            random.randint(-100, 100),
-            random.randint(-100, 100),
+            random.randint(-20, 20),
+            random.randint(-20, 20),
+            random.randint(-20, 20),
+            random.randint(-20, 20),
         )
         return int(instance_id)
 
@@ -391,17 +397,17 @@ class GameService:
         if not fodder:
             raise ValueError(f"You do not have any unlocked {normalized_rarity.title()} cards to use.")
 
-        levels_needed = target.max_enhancement_level - target.enhancement_level
-        chosen = fodder[:levels_needed]
-        new_level = min(target.max_enhancement_level, target.enhancement_level + len(chosen))
+        chosen = list(fodder)
+        new_level, new_xp, consumed_count = self._calculate_enhancement_progress(target, chosen)
         statements: list[tuple[str, tuple[object, ...]]] = [
             (
                 """
                 UPDATE player_characters
-                SET enhancement_level = $3
+                SET enhancement_level = $3,
+                    enhancement_xp = $4
                 WHERE player_id = $1 AND id = $2
                 """,
-                (player_id, target_instance_id, new_level),
+                (player_id, target_instance_id, new_level, new_xp),
             ),
         ]
         statements.extend(
@@ -409,13 +415,13 @@ class GameService:
                 "DELETE FROM player_characters WHERE player_id = $1 AND id = $2",
                 (player_id, character.instance_id),
             )
-            for character in chosen
+            for character in chosen[:consumed_count]
         )
         await self.db.executemany(statements)
         updated = await self.get_character_instance(player_id, target_instance_id)
         if not updated:
             raise ValueError("Enhancement completed but the character could not be reloaded.")
-        return updated, len(chosen), new_level - target.enhancement_level
+        return updated, consumed_count, new_level - target.enhancement_level
 
     async def preview_enhancement(
         self,
@@ -444,9 +450,30 @@ class GameService:
         if usable_count < 1:
             raise ValueError(f"You do not have any unlocked {normalized_rarity.title()} cards to use.")
 
-        levels_needed = target.max_enhancement_level - target.enhancement_level
-        levels_gained = min(levels_needed, usable_count)
-        return usable_count if usable_count < levels_needed else levels_needed, levels_gained
+        _, _, consumed_count = self._calculate_enhancement_progress(
+            target,
+            [
+                character
+                for character in owned
+                if character.instance_id != target_instance_id
+                and not character.locked
+                and character.definition.rarity.lower() == normalized_rarity
+            ],
+        )
+        preview_target = await self.get_character_instance(player_id, target_instance_id)
+        if not preview_target:
+            raise ValueError("Character instance not found.")
+        new_level, _, _ = self._calculate_enhancement_progress(
+            preview_target,
+            [
+                character
+                for character in owned
+                if character.instance_id != target_instance_id
+                and not character.locked
+                and character.definition.rarity.lower() == normalized_rarity
+            ],
+        )
+        return consumed_count, new_level - target.enhancement_level
 
     async def evolve_character(self, player_id: int, target_instance_id: int) -> tuple[OwnedCharacter, list[int]]:
         target = await self.get_character_instance(player_id, target_instance_id)
@@ -799,16 +826,17 @@ class GameService:
                 raise ValueError("You need at least 1 Training Scroll.")
             if character.level >= 100:
                 raise ValueError("This character is already level 100.")
+            new_level, new_xp = self._apply_level_xp(character, 120)
             await self.db.executemany(
                 [
                     ("UPDATE players SET training_scrolls = training_scrolls - 1 WHERE id = $1", (player_id,)),
                     (
                         """
                         UPDATE player_characters
-                        SET level = level + 1, xp = xp + 100
+                        SET level = $3, xp = $4
                         WHERE player_id = $1 AND id = $2
                         """,
-                        (player_id, instance_id),
+                        (player_id, instance_id, new_level, new_xp),
                     ),
                 ]
             )
@@ -885,6 +913,45 @@ class GameService:
             raise ValueError("Upgrade completed but character could not be reloaded.")
         return updated
 
+    def _apply_level_xp(self, character: OwnedCharacter, gained_xp: int) -> tuple[int, int]:
+        level = character.level
+        xp = character.xp + gained_xp
+        while level < 100:
+            requirement = int(100 * (1.18 ** max(0, level - 1)))
+            if xp < requirement:
+                break
+            xp -= requirement
+            level += 1
+        if level >= 100:
+            level = 100
+            xp = 0
+        return level, xp
+
+    def _calculate_enhancement_progress(
+        self,
+        target: OwnedCharacter,
+        fodder_cards: list[OwnedCharacter],
+    ) -> tuple[int, int, int]:
+        level = target.enhancement_level
+        xp = target.enhancement_xp
+        consumed = 0
+        for fodder in fodder_cards:
+            if level >= target.max_enhancement_level:
+                break
+            xp += self.ENHANCEMENT_XP_BY_RARITY.get(fodder.definition.rarity.lower(), 60)
+            consumed += 1
+            while level < target.max_enhancement_level:
+                requirement = int(60 * (1.14 ** max(0, level)))
+                if xp < requirement:
+                    break
+                xp -= requirement
+                level += 1
+            if level >= target.max_enhancement_level:
+                level = target.max_enhancement_level
+                xp = 0
+                break
+        return level, xp, consumed
+
     def _profile_from_record(self, record) -> PlayerProfile:
         def parse_optional(value):
             if not (self.db.is_sqlite and value):
@@ -952,6 +1019,7 @@ class GameService:
             grade=row["grade"],
             skill_level=row["skill_level"],
             enhancement_level=row["enhancement_level"],
+            enhancement_xp=row["enhancement_xp"],
             evolution_stage=row["evolution_stage"],
             hp_roll=row["hp_roll"],
             attack_roll=row["attack_roll"],

@@ -9,6 +9,12 @@ MAX_ENHANCEMENT_BY_RARITY = {
     "epic": 45,
     "legendary": 60,
 }
+RARITY_STAT_MULTIPLIER = {
+    "normal": 1.0,
+    "rare": 1.06,
+    "epic": 1.12,
+    "legendary": 1.2,
+}
 
 
 @dataclass(slots=True)
@@ -44,6 +50,7 @@ class OwnedCharacter:
     grade: int
     skill_level: int
     enhancement_level: int
+    enhancement_xp: int
     evolution_stage: int
     hp_roll: int
     attack_roll: int
@@ -66,7 +73,16 @@ class OwnedCharacter:
 
     @property
     def stat_multiplier(self) -> float:
-        return 1.0 + self.enhancement_level * 0.025 + self.evolution_stage * 0.18
+        rarity_bonus = RARITY_STAT_MULTIPLIER.get(self.definition.rarity.lower(), 1.0)
+        return rarity_bonus * (1.0 + self.enhancement_level * 0.025 + self.evolution_stage * 0.18)
+
+    @property
+    def next_level_xp(self) -> int:
+        return int(100 * (1.18 ** max(0, self.level - 1)))
+
+    @property
+    def next_enhancement_xp(self) -> int:
+        return int(60 * (1.14 ** max(0, self.enhancement_level)))
 
     @property
     def max_hp_stat(self) -> int:

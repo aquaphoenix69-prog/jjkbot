@@ -123,6 +123,8 @@ class EnhancementConfirmView(discord.ui.View):
 
 
 class GameCog(commands.Cog):
+    MAX_SUMMON_BATCH = 100
+
     def __init__(self, bot: commands.Bot) -> None:
         self.bot = bot
         self.admin_usernames = {"__gloom", "_nez_24", "frustated_fungus"}
@@ -399,13 +401,13 @@ class GameCog(commands.Cog):
         normalized = raw.lower().strip()
         if normalized == "all":
             cost = SUMMON_TYPES[summon_type]["cost"]
-            return available_coins // cost
+            return min(available_coins // cost, self.MAX_SUMMON_BATCH)
         if normalized.isdigit():
-            return int(normalized)
+            return min(int(normalized), self.MAX_SUMMON_BATCH)
         if normalized.startswith("n-"):
             tail = normalized[2:]
             if tail.isdigit():
-                return int(tail)
+                return min(int(tail), self.MAX_SUMMON_BATCH)
         return None
 
     def _parse_inventory_options(self, options: list[str]) -> tuple[list[str], str | None, bool]:

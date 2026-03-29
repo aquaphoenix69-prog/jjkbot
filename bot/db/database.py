@@ -62,6 +62,7 @@ CREATE TABLE IF NOT EXISTS player_characters (
     grade INTEGER NOT NULL DEFAULT 1,
     skill_level INTEGER NOT NULL DEFAULT 1,
     enhancement_level INTEGER NOT NULL DEFAULT 0,
+    enhancement_xp INTEGER NOT NULL DEFAULT 0,
     evolution_stage INTEGER NOT NULL DEFAULT 0,
     hp_roll INTEGER NOT NULL DEFAULT 0,
     attack_roll INTEGER NOT NULL DEFAULT 0,
@@ -147,6 +148,7 @@ CREATE TABLE IF NOT EXISTS player_characters (
     grade INTEGER NOT NULL DEFAULT 1,
     skill_level INTEGER NOT NULL DEFAULT 1,
     enhancement_level INTEGER NOT NULL DEFAULT 0,
+    enhancement_xp INTEGER NOT NULL DEFAULT 0,
     evolution_stage INTEGER NOT NULL DEFAULT 0,
     hp_roll INTEGER NOT NULL DEFAULT 0,
     attack_roll INTEGER NOT NULL DEFAULT 0,
@@ -205,6 +207,7 @@ class Database:
             await self._sqlite_exec_script(SCHEMA_SQL_SQLITE)
             await self._sqlite_ensure_column("character_catalog", "card_number", "INTEGER NOT NULL DEFAULT 0")
             await self._sqlite_ensure_column("player_characters", "enhancement_level", "INTEGER NOT NULL DEFAULT 0")
+            await self._sqlite_ensure_column("player_characters", "enhancement_xp", "INTEGER NOT NULL DEFAULT 0")
             await self._sqlite_ensure_column("player_characters", "evolution_stage", "INTEGER NOT NULL DEFAULT 0")
             await self._sqlite_ensure_column("player_characters", "hp_roll", "INTEGER NOT NULL DEFAULT 0")
             await self._sqlite_ensure_column("player_characters", "attack_roll", "INTEGER NOT NULL DEFAULT 0")
@@ -223,6 +226,9 @@ class Database:
         )
         await self.execute(
             "ALTER TABLE player_characters ADD COLUMN IF NOT EXISTS enhancement_level INTEGER NOT NULL DEFAULT 0"
+        )
+        await self.execute(
+            "ALTER TABLE player_characters ADD COLUMN IF NOT EXISTS enhancement_xp INTEGER NOT NULL DEFAULT 0"
         )
         await self.execute(
             "ALTER TABLE player_characters ADD COLUMN IF NOT EXISTS evolution_stage INTEGER NOT NULL DEFAULT 0"
