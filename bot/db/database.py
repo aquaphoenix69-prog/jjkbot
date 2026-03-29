@@ -61,6 +61,8 @@ CREATE TABLE IF NOT EXISTS player_characters (
     xp INTEGER NOT NULL DEFAULT 0,
     grade INTEGER NOT NULL DEFAULT 1,
     skill_level INTEGER NOT NULL DEFAULT 1,
+    enhancement_level INTEGER NOT NULL DEFAULT 0,
+    evolution_stage INTEGER NOT NULL DEFAULT 0,
     awakened BOOLEAN NOT NULL DEFAULT FALSE,
     locked BOOLEAN NOT NULL DEFAULT FALSE,
     acquired_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
@@ -134,6 +136,8 @@ CREATE TABLE IF NOT EXISTS player_characters (
     xp INTEGER NOT NULL DEFAULT 0,
     grade INTEGER NOT NULL DEFAULT 1,
     skill_level INTEGER NOT NULL DEFAULT 1,
+    enhancement_level INTEGER NOT NULL DEFAULT 0,
+    evolution_stage INTEGER NOT NULL DEFAULT 0,
     awakened INTEGER NOT NULL DEFAULT 0,
     locked INTEGER NOT NULL DEFAULT 0,
     acquired_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
@@ -180,10 +184,18 @@ class Database:
         if self.is_sqlite:
             await self._sqlite_exec_script(SCHEMA_SQL_SQLITE)
             await self._sqlite_ensure_column("character_catalog", "card_number", "INTEGER NOT NULL DEFAULT 0")
+            await self._sqlite_ensure_column("player_characters", "enhancement_level", "INTEGER NOT NULL DEFAULT 0")
+            await self._sqlite_ensure_column("player_characters", "evolution_stage", "INTEGER NOT NULL DEFAULT 0")
             return
         await self.execute(SCHEMA_SQL_POSTGRES)
         await self.execute(
             "ALTER TABLE character_catalog ADD COLUMN IF NOT EXISTS card_number INTEGER NOT NULL DEFAULT 0"
+        )
+        await self.execute(
+            "ALTER TABLE player_characters ADD COLUMN IF NOT EXISTS enhancement_level INTEGER NOT NULL DEFAULT 0"
+        )
+        await self.execute(
+            "ALTER TABLE player_characters ADD COLUMN IF NOT EXISTS evolution_stage INTEGER NOT NULL DEFAULT 0"
         )
 
     async def execute(self, query: str, *args: Any) -> str:

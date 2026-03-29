@@ -1,9 +1,13 @@
 from __future__ import annotations
 
+import asyncio
+import io
+
 import discord
 from discord.ext import commands
 
-from bot.utils.embeds import battle_embed
+from bot.utils.battle_visuals import render_battle_snapshot
+from bot.utils.embeds import battle_embed, battle_snapshot_embed
 
 
 class BattleCog(commands.Cog):
@@ -42,8 +46,7 @@ class BattleCog(commands.Cog):
         except ValueError as exc:
             await ctx.send(str(exc))
             return
-
-        await ctx.send(embed=battle_embed(title, log))
+        await self._play_battle(ctx, title, log)
 
     @commands.command(
         aliases=["duel", "challenge"],
@@ -75,7 +78,32 @@ class BattleCog(commands.Cog):
         except ValueError as exc:
             await ctx.send(str(exc))
             return
-        await ctx.send(embed=battle_embed("Ranked PvP Result", log))
+        await self._play_battle(ctx, "Ranked PvP Result", log)
+
+    async def _play_battle(self, ctx: commands.Context, title: str, log) -> None:
+        if not log.snapshots:
+            await ctx.send(embed=battle_embed(title, log))
+            return
+
+        first_snapshot = log.snapshots[0]
+        image_bytes, image_name = await render_battle_snapshot(first_snapshot)
+        message = await ctx.send(
+            embed=battle_snapshot_embed(title, first_snapshot),
+            file=discord.File(io.BytesIO(image_bytes), filename=image_name),
+        )
+
+        max_updates = min(len(log.snapshots), 18)
+        selected = log.snapshots[:max_updates]
+        for snapshot in selected[1:]:
+            await asyncio.sleep(1.2)
+            image_bytes, image_name = await render_battle_snapshot(snapshot)
+            await message.edit(
+                embed=battle_snapshot_embed(title, snapshot),
+                attachments=[discord.File(io.BytesIO(image_bytes), filename=image_name)],
+            )
+
+        await asyncio.sleep(1.0)
+        await message.edit(embed=battle_embed(title, log), attachments=[])
 
     async def cog_command_error(self, ctx: commands.Context, error: commands.CommandError) -> None:
         if isinstance(error, commands.CommandOnCooldown):

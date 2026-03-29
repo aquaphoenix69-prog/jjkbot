@@ -8,7 +8,11 @@ from discord.ext import commands
 
 from bot.data.characters import SUMMON_TYPES
 from bot.utils.embeds import (
+    card_info_embed,
+    character_catalog_embed,
     daily_embed,
+    enhancement_embed,
+    evolution_embed,
     inventory_page_embed,
     leaderboard_embed,
     profile_embed,
@@ -88,7 +92,7 @@ class GameCog(commands.Cog):
             },
             "game": {
                 "description": "Collection management, summoning, teams, and upgrades.",
-                "commands": ["summon", "inventory", "team", "lock", "upgrade"],
+                "commands": ["summon", "inventory", "info", "cinfo", "team", "lock", "enh", "evo", "upgrade"],
             },
             "admin": {
                 "description": "Owner-only economy and inventory controls.",
@@ -287,6 +291,62 @@ class GameCog(commands.Cog):
                 return int(tail)
         return None
 
+    def _parse_inventory_options(self, options: list[str]) -> tuple[str, str | None, bool]:
+        sort_key = "default"
+        rarity_filter: str | None = None
+        ascending = False
+        index = 0
+        sort_aliases = {
+            "-hp": "hp",
+            "-atk": "attack",
+            "-attack": "attack",
+            "-def": "defense",
+            "-defense": "defense",
+            "-spd": "speed",
+            "-speed": "speed",
+            "-energy": "energy",
+            "-pow": "power",
+            "-power": "power",
+            "-lvl": "level",
+            "-level": "level",
+            "-enh": "enhancement",
+            "-enhancement": "enhancement",
+            "-evo": "evolution",
+            "-evolution": "evolution",
+            "-id": "id",
+            "-card": "card",
+        }
+        valid_rarities = {"normal", "rare", "epic", "legendary"}
+
+        while index < len(options):
+            option = options[index].lower().strip()
+            if option == "-asc":
+                ascending = True
+            elif option == "-r":
+                next_token = options[index + 1].lower().strip() if index + 1 < len(options) else None
+                if next_token in valid_rarities:
+                    rarity_filter = next_token
+                    index += 1
+                else:
+                    sort_key = "rarity"
+            elif option in sort_aliases:
+                sort_key = sort_aliases[option]
+            else:
+                raise ValueError(
+                    "Unknown inventory option. Use `-r [rarity]`, `-hp`, `-atk`, `-def`, `-spd`, `-energy`, `-power`, `-lvl`, `-enh`, `-evo`, `-id`, `-card`, or `-asc`."
+                )
+            index += 1
+
+        return sort_key, rarity_filter, ascending
+
+    def _parse_enhancement_rarity(self, options: list[str]) -> str:
+        if len(options) != 2 or options[0].lower().strip() != "-r":
+            raise ValueError("Use `y!enh <instance_id> -r <normal|rare|epic|legendary>`.")
+        rarity = options[1].lower().strip()
+        if rarity not in {"normal", "rare", "epic", "legendary"}:
+            raise ValueError("Rarity must be `normal`, `rare`, `epic`, or `legendary`.")
+        return rarity
+
     async def _build_summon_entry(
         self,
         user: discord.abc.User,
@@ -350,23 +410,132 @@ class GameCog(commands.Cog):
         help="Browse every character you own.",
         extras={
             "category": "game",
-            "usage": "y!inventory",
-            "examples": ["y!inventory"],
-            "details": "Shows your collection with instance ids, levels, grades, and skill levels. Use the buttons to switch pages.",
+            "usage": "y!inventory [-r [rarity]] [-hp|-atk|-def|-spd|-energy|-power|-lvl|-enh|-evo|-id|-card] [-asc]",
+            "examples": ["y!inventory", "y!inv -r", "y!inv -r legendary", "y!inv -atk", "y!inv -power -asc"],
+            "details": "Use `-r` alone to sort by rarity or `-r legendary` to filter to one rarity. Stat flags sort by that stat. `-asc` flips the order.",
         },
     )
     @commands.cooldown(1, 4.0, commands.BucketType.user)
-    async def inventory(self, ctx: commands.Context) -> None:
+    async def inventory(self, ctx: commands.Context, *options: str) -> None:
         profile = await self.bot.game.get_profile(ctx.author.id)
         if not profile:
             await ctx.send("Use `y!start` first.")
             return
-        characters = await self.bot.game.get_owned_characters(profile.player_id)
+        try:
+            sort_key, rarity_filter, ascending = self._parse_inventory_options(list(options))
+        except ValueError as exc:
+            await ctx.send(str(exc))
+            return
+        characters = await self.bot.game.get_owned_characters(
+            profile.player_id,
+            sort_key=sort_key,
+            rarity_filter=rarity_filter,
+            ascending=ascending,
+        )
         embeds = [
-            inventory_page_embed(ctx.author, characters, page, 8)
+            inventory_page_embed(
+                ctx.author,
+                characters,
+                page,
+                8,
+                sort_label=self.bot.game.INVENTORY_SORT_LABELS.get(sort_key, "Default"),
+                rarity_filter=rarity_filter,
+            )
             for page in range(max(1, (len(characters) + 7) // 8))
         ]
         await ctx.send(embed=embeds[0], view=InventoryView(ctx.author.id, embeds))
+
+    @commands.command(
+        aliases=["cardinfo", "invinfo"],
+        help="Show the full details for one owned card using its inventory number.",
+        extras={
+            "category": "game",
+            "usage": "y!info <inventory_number>",
+            "examples": ["y!info 1", "y!info 12"],
+            "details": "Uses the numbered order shown in `y!inventory` and displays the chosen owned card with stats, progression, skills, passive, and art.",
+        },
+    )
+    @commands.cooldown(1, 2.0, commands.BucketType.user)
+    async def info(self, ctx: commands.Context, inventory_number: int) -> None:
+        profile = await self.bot.game.get_profile(ctx.author.id)
+        if not profile:
+            await ctx.send("Use `y!start` first.")
+            return
+        character = await self.bot.game.get_inventory_entry_by_position(profile.player_id, inventory_number)
+        if not character:
+            await ctx.send("That inventory number does not exist.")
+            return
+        await ctx.send(embed=card_info_embed(character, inventory_number))
+
+    @commands.command(
+        aliases=["charinfo", "dex", "ci"],
+        help="Search the card catalog by name and view a character's base info.",
+        extras={
+            "category": "game",
+            "usage": "y!cinfo <character name>",
+            "examples": ["y!cinfo gojo", "y!cinfo yuta okkotsu"],
+            "details": "Searches the catalog by character name, title, or key and shows the base card data, stats, passive, skills, and image.",
+        },
+    )
+    @commands.cooldown(1, 2.0, commands.BucketType.user)
+    async def cinfo(self, ctx: commands.Context, *, query: str) -> None:
+        character = self.bot.game.find_character_definition(query)
+        if not character:
+            await ctx.send("No character matched that search.")
+            return
+        await ctx.send(embed=character_catalog_embed(character))
+
+    @commands.command(
+        name="enh",
+        aliases=["enhlvl"],
+        help="Feed unlocked cards of one rarity into a target card for enhancement levels.",
+        extras={
+            "category": "game",
+            "usage": "y!enh <instance_id> -r <normal|rare|epic|legendary>",
+            "examples": ["y!enh 14 -r rare", "y!enh 3 -r legendary"],
+            "details": "Consumes every unlocked card of the chosen rarity except the target until that unit reaches its rarity enhancement cap. Locked cards are never consumed.",
+        },
+    )
+    @commands.cooldown(1, 3.0, commands.BucketType.user)
+    async def enh(self, ctx: commands.Context, instance_id: int, *options: str) -> None:
+        profile = await self.bot.game.get_profile(ctx.author.id)
+        if not profile:
+            await ctx.send("Use `y!start` first.")
+            return
+        try:
+            fodder_rarity = self._parse_enhancement_rarity(list(options))
+            character, consumed_count, levels_gained = await self.bot.game.enhance_character(
+                profile.player_id,
+                instance_id,
+                fodder_rarity,
+            )
+        except ValueError as exc:
+            await ctx.send(str(exc))
+            return
+        await ctx.send(embed=enhancement_embed(character, consumed_count, levels_gained, fodder_rarity))
+
+    @commands.command(
+        aliases=["evolve"],
+        help="Evolve a unit by consuming two unlocked duplicate copies at the same evo stage.",
+        extras={
+            "category": "game",
+            "usage": "y!evo <instance_id>",
+            "examples": ["y!evo 14"],
+            "details": "Consumes two unlocked duplicates of the same character at the same current evo stage. Evolution caps at evo 3.",
+        },
+    )
+    @commands.cooldown(1, 3.0, commands.BucketType.user)
+    async def evo(self, ctx: commands.Context, instance_id: int) -> None:
+        profile = await self.bot.game.get_profile(ctx.author.id)
+        if not profile:
+            await ctx.send("Use `y!start` first.")
+            return
+        try:
+            character, consumed_ids = await self.bot.game.evolve_character(profile.player_id, instance_id)
+        except ValueError as exc:
+            await ctx.send(str(exc))
+            return
+        await ctx.send(embed=evolution_embed(character, consumed_ids))
 
     @commands.command(
         aliases=["tm", "squad", "lineup"],

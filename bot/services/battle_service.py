@@ -5,7 +5,7 @@ from dataclasses import dataclass, field
 from datetime import datetime
 
 from bot.data.characters import CHARACTERS
-from bot.models.game import BattleLog, CharacterDefinition, OwnedCharacter
+from bot.models.game import BattleLog, BattleSnapshot, BattleUnitState, CharacterDefinition, OwnedCharacter
 from bot.services.game_service import GameService
 
 
@@ -19,7 +19,10 @@ class Fighter:
     defense: int
     speed: int
     energy: int
+    max_energy: int
     skill_level: int
+    level: int
+    evolution_stage: int
     awakened: bool
     team: str
     status: dict[str, int] = field(default_factory=dict)
@@ -72,6 +75,8 @@ class BattleService:
             xp=0,
             grade=4,
             skill_level=7,
+            enhancement_level=30,
+            evolution_stage=2,
             awakened=True,
             locked=False,
             acquired_at=datetime.utcnow(),
@@ -115,6 +120,8 @@ class BattleService:
                     xp=0,
                     grade=min(5, 1 + stage // 4),
                     skill_level=min(10, 1 + stage // 5),
+                    enhancement_level=min(40, stage // 2),
+                    evolution_stage=min(3, stage // 10),
                     awakened=stage >= 12,
                     locked=False,
                     acquired_at=datetime.utcnow(),
@@ -132,13 +139,16 @@ class BattleService:
                 Fighter(
                     name=owned.definition.name,
                     definition=owned.definition,
-                    max_hp=int(owned.definition.base_hp * scale * awaken_bonus),
-                    hp=int(owned.definition.base_hp * scale * awaken_bonus),
-                    attack=int((owned.definition.base_attack + owned.skill_level * 5) * scale * awaken_bonus),
-                    defense=int(owned.definition.base_defense * scale * awaken_bonus),
-                    speed=int(owned.definition.base_speed * (1 + owned.level * 0.005)),
-                    energy=owned.definition.base_energy,
+                    max_hp=int(owned.effective_hp * scale * awaken_bonus),
+                    hp=int(owned.effective_hp * scale * awaken_bonus),
+                    attack=int((owned.effective_attack + owned.skill_level * 5) * scale * awaken_bonus),
+                    defense=int(owned.effective_defense * scale * awaken_bonus),
+                    speed=int(owned.effective_speed * (1 + owned.level * 0.005)),
+                    energy=owned.effective_energy,
+                    max_energy=owned.effective_energy,
                     skill_level=owned.skill_level,
+                    level=owned.level,
+                    evolution_stage=owned.evolution_stage,
                     awakened=owned.awakened,
                     team=label,
                 )
@@ -180,8 +190,30 @@ class BattleService:
                 battle_log.rounds.append(
                     f"{fighter.name} used {action_name} on {target.name} for {damage} damage.{extra}"
                 )
+                battle_log.snapshots.append(
+                    self._snapshot(
+                        round_number,
+                        fighter,
+                        target,
+                        action_name,
+                        f"{fighter.name} used {action_name} on {target.name} for {damage} damage.{extra}",
+                        left_team,
+                        right_team,
+                    )
+                )
                 if target.hp == 0:
                     battle_log.rounds.append(f"{target.name} was exorcised.")
+                    battle_log.snapshots.append(
+                        self._snapshot(
+                            round_number,
+                            fighter,
+                            target,
+                            "Exorcised",
+                            f"{target.name} was exorcised.",
+                            left_team,
+                            right_team,
+                        )
+                    )
 
                 if self._all_defeated(opponents):
                     battle_log.winner = fighter.team
@@ -193,6 +225,43 @@ class BattleService:
         right_alive = sum(1 for fighter in right_team if fighter.alive)
         battle_log.winner = left_team[0].team if left_alive >= right_alive else right_team[0].team
         return battle_log
+
+    def _snapshot(
+        self,
+        round_number: int,
+        fighter: Fighter,
+        target: Fighter,
+        action_name: str,
+        detail: str,
+        left_team: list[Fighter],
+        right_team: list[Fighter],
+    ) -> BattleSnapshot:
+        return BattleSnapshot(
+            round_number=round_number,
+            actor_team=fighter.team,
+            actor_name=fighter.name,
+            target_name=target.name,
+            action_name=action_name,
+            detail=detail,
+            left_team=[self._unit_state(item) for item in left_team],
+            right_team=[self._unit_state(item) for item in right_team],
+        )
+
+    def _unit_state(self, fighter: Fighter) -> BattleUnitState:
+        return BattleUnitState(
+            name=fighter.name,
+            image_url=fighter.definition.image_url,
+            rarity=fighter.definition.rarity,
+            level=fighter.level,
+            evolution_stage=fighter.evolution_stage,
+            hp=fighter.hp,
+            max_hp=fighter.max_hp,
+            energy=fighter.energy,
+            max_energy=fighter.max_energy,
+            skill_level=fighter.skill_level,
+            passive=fighter.definition.passive,
+            status={key: value for key, value in fighter.status.items() if value > 0},
+        )
 
     def _perform_action(self, fighter: Fighter, target: Fighter) -> tuple[str, int, str]:
         critical = random.random() < 0.18

@@ -10,6 +10,27 @@ from bot.models.game import CharacterDefinition, OwnedCharacter, PlayerProfile
 
 
 class GameService:
+    INVENTORY_SORT_LABELS: dict[str, str] = {
+        "default": "Default",
+        "rarity": "Rarity",
+        "hp": "HP",
+        "attack": "Attack",
+        "defense": "Defense",
+        "speed": "Speed",
+        "energy": "Energy",
+        "power": "Power",
+        "level": "Level",
+        "enhancement": "Enhancement",
+        "evolution": "Evolution",
+        "id": "Inventory ID",
+        "card": "Card Number",
+    }
+    RARITY_ORDER = {
+        "normal": 0,
+        "rare": 1,
+        "epic": 2,
+        "legendary": 3,
+    }
     LEADERBOARD_STATS: dict[str, dict[str, str]] = {
         "rank": {
             "column": "rank_points",
@@ -176,7 +197,14 @@ class GameService:
         )
         return int(instance_id)
 
-    async def get_owned_characters(self, player_id: int) -> list[OwnedCharacter]:
+    async def get_owned_characters(
+        self,
+        player_id: int,
+        *,
+        sort_key: str = "default",
+        rarity_filter: str | None = None,
+        ascending: bool = False,
+    ) -> list[OwnedCharacter]:
         records = await self.db.fetch(
             """
             SELECT pc.*, cc.name, cc.title, cc.rarity, cc.grade_label, cc.base_hp,
@@ -186,11 +214,17 @@ class GameService:
             FROM player_characters pc
             JOIN character_catalog cc ON cc.key = pc.character_key
             WHERE pc.player_id = $1
-            ORDER BY pc.locked DESC, pc.awakened DESC, pc.level DESC, pc.id ASC
+            ORDER BY pc.id ASC
             """,
             player_id,
         )
-        return [self._owned_from_record(row) for row in records]
+        characters = [self._owned_from_record(row) for row in records]
+        return self._sort_owned_characters(
+            characters,
+            sort_key=sort_key,
+            rarity_filter=rarity_filter,
+            ascending=ascending,
+        )
 
     async def get_character_instance(
         self, player_id: int, instance_id: int
@@ -209,6 +243,47 @@ class GameService:
             instance_id,
         )
         return self._owned_from_record(row) if row else None
+
+    async def get_inventory_entry_by_position(
+        self,
+        player_id: int,
+        position: int,
+        *,
+        sort_key: str = "default",
+        rarity_filter: str | None = None,
+        ascending: bool = False,
+    ) -> OwnedCharacter | None:
+        if position < 1:
+            return None
+        characters = await self.get_owned_characters(
+            player_id,
+            sort_key=sort_key,
+            rarity_filter=rarity_filter,
+            ascending=ascending,
+        )
+        if position > len(characters):
+            return None
+        return characters[position - 1]
+
+    def find_character_definition(self, query: str) -> CharacterDefinition | None:
+        normalized = query.lower().strip()
+        if not normalized:
+            return None
+        exact = [
+            character
+            for character in CHARACTERS
+            if character.key.lower() == normalized or character.name.lower() == normalized
+        ]
+        if exact:
+            return exact[0]
+        partial = [
+            character
+            for character in CHARACTERS
+            if normalized in character.name.lower() or normalized in character.key.lower() or normalized in character.title.lower()
+        ]
+        if partial:
+            return partial[0]
+        return None
 
     async def get_team(self, player_id: int) -> list[OwnedCharacter]:
         record = await self.db.fetchrow("SELECT * FROM teams WHERE player_id = $1", player_id)
@@ -252,6 +327,103 @@ class GameService:
             instance_id,
         )
         return bool(locked)
+
+    async def enhance_character(
+        self,
+        player_id: int,
+        target_instance_id: int,
+        fodder_rarity: str,
+    ) -> tuple[OwnedCharacter, int, int]:
+        target = await self.get_character_instance(player_id, target_instance_id)
+        if not target:
+            raise ValueError("Character instance not found.")
+        if target.enhancement_level >= target.max_enhancement_level:
+            raise ValueError(f"This character is already at the enhancement cap of {target.max_enhancement_level}.")
+
+        normalized_rarity = fodder_rarity.lower().strip()
+        if normalized_rarity not in self.RARITY_ORDER:
+            raise ValueError("Rarity must be `normal`, `rare`, `epic`, or `legendary`.")
+
+        owned = await self.get_owned_characters(player_id, sort_key="id", ascending=True)
+        fodder = [
+            character
+            for character in owned
+            if character.instance_id != target_instance_id
+            and not character.locked
+            and character.definition.rarity.lower() == normalized_rarity
+        ]
+        if not fodder:
+            raise ValueError(f"You do not have any unlocked {normalized_rarity.title()} cards to use.")
+
+        levels_needed = target.max_enhancement_level - target.enhancement_level
+        chosen = fodder[:levels_needed]
+        new_level = min(target.max_enhancement_level, target.enhancement_level + len(chosen))
+        statements: list[tuple[str, tuple[object, ...]]] = [
+            (
+                """
+                UPDATE player_characters
+                SET enhancement_level = $3
+                WHERE player_id = $1 AND id = $2
+                """,
+                (player_id, target_instance_id, new_level),
+            ),
+        ]
+        statements.extend(
+            (
+                "DELETE FROM player_characters WHERE player_id = $1 AND id = $2",
+                (player_id, character.instance_id),
+            )
+            for character in chosen
+        )
+        await self.db.executemany(statements)
+        updated = await self.get_character_instance(player_id, target_instance_id)
+        if not updated:
+            raise ValueError("Enhancement completed but the character could not be reloaded.")
+        return updated, len(chosen), new_level - target.enhancement_level
+
+    async def evolve_character(self, player_id: int, target_instance_id: int) -> tuple[OwnedCharacter, list[int]]:
+        target = await self.get_character_instance(player_id, target_instance_id)
+        if not target:
+            raise ValueError("Character instance not found.")
+        if target.evolution_stage >= 3:
+            raise ValueError("This character is already at max evolution.")
+
+        owned = await self.get_owned_characters(player_id, sort_key="id", ascending=True)
+        sacrifices = [
+            character
+            for character in owned
+            if character.instance_id != target_instance_id
+            and not character.locked
+            and character.character_key == target.character_key
+            and character.evolution_stage == target.evolution_stage
+        ]
+        if len(sacrifices) < 2:
+            next_stage = target.evolution_stage + 1
+            raise ValueError(
+                f"You need 2 unlocked duplicate copies of this unit at evo {target.evolution_stage} to reach evo {next_stage}."
+            )
+
+        consumed = sacrifices[:2]
+        await self.db.executemany(
+            [
+                (
+                    """
+                    UPDATE player_characters
+                    SET evolution_stage = evolution_stage + 1
+                    WHERE player_id = $1 AND id = $2
+                    """,
+                    (player_id, target_instance_id),
+                ),
+                *[
+                    ("DELETE FROM player_characters WHERE player_id = $1 AND id = $2", (player_id, item.instance_id))
+                    for item in consumed
+                ],
+            ]
+        )
+        updated = await self.get_character_instance(player_id, target_instance_id)
+        if not updated:
+            raise ValueError("Evolution completed but the character could not be reloaded.")
+        return updated, [item.instance_id for item in consumed]
 
     async def summon(
         self, player_id: int, summon_type: str, amount: int
@@ -671,11 +843,69 @@ class GameService:
             xp=row["xp"],
             grade=row["grade"],
             skill_level=row["skill_level"],
+            enhancement_level=row["enhancement_level"],
+            evolution_stage=row["evolution_stage"],
             awakened=bool(row["awakened"]),
             locked=bool(row["locked"]),
             acquired_at=acquired_at,
             definition=definition,
         )
+
+    def _sort_owned_characters(
+        self,
+        characters: list[OwnedCharacter],
+        *,
+        sort_key: str,
+        rarity_filter: str | None,
+        ascending: bool,
+    ) -> list[OwnedCharacter]:
+        if rarity_filter:
+            normalized_filter = rarity_filter.lower().strip()
+            characters = [
+                character
+                for character in characters
+                if character.definition.rarity.lower() == normalized_filter
+            ]
+
+        normalized_sort = sort_key.lower().strip()
+        if normalized_sort not in self.INVENTORY_SORT_LABELS:
+            normalized_sort = "default"
+
+        if normalized_sort == "default":
+            return sorted(
+                characters,
+                key=lambda owned: (
+                    owned.locked,
+                    owned.awakened,
+                    owned.evolution_stage,
+                    owned.enhancement_level,
+                    owned.level,
+                    -owned.instance_id,
+                ),
+                reverse=True,
+            )
+
+        sorters = {
+            "rarity": lambda owned: (
+                self.RARITY_ORDER.get(owned.definition.rarity.lower(), -1),
+                owned.evolution_stage,
+                owned.enhancement_level,
+                owned.power,
+                -owned.instance_id,
+            ),
+            "hp": lambda owned: (owned.effective_hp, owned.power, -owned.instance_id),
+            "attack": lambda owned: (owned.effective_attack, owned.power, -owned.instance_id),
+            "defense": lambda owned: (owned.effective_defense, owned.power, -owned.instance_id),
+            "speed": lambda owned: (owned.effective_speed, owned.power, -owned.instance_id),
+            "energy": lambda owned: (owned.effective_energy, owned.power, -owned.instance_id),
+            "power": lambda owned: (owned.power, owned.effective_attack, -owned.instance_id),
+            "level": lambda owned: (owned.level, owned.enhancement_level, owned.power, -owned.instance_id),
+            "enhancement": lambda owned: (owned.enhancement_level, owned.evolution_stage, owned.power, -owned.instance_id),
+            "evolution": lambda owned: (owned.evolution_stage, owned.enhancement_level, owned.power, -owned.instance_id),
+            "id": lambda owned: owned.instance_id,
+            "card": lambda owned: (owned.definition.card_number, -owned.instance_id),
+        }
+        return sorted(characters, key=sorters[normalized_sort], reverse=not ascending)
 
     def _build_summon_pool(self, summon_type: str) -> list[tuple[CharacterDefinition, float]]:
         summon_data = SUMMON_TYPES[summon_type]
