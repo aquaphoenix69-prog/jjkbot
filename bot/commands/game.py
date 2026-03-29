@@ -137,6 +137,10 @@ class GameCog(commands.Cog):
                 "description": "Collection management, summoning, teams, and upgrades.",
                 "commands": ["summon", "inventory", "info", "cinfo", "team", "lock", "enh", "evo", "upgrade"],
             },
+            "social": {
+                "description": "Trading, clans, and server customization.",
+                "commands": ["trade", "clan", "prefix"],
+            },
             "admin": {
                 "description": "Owner-only economy and inventory controls.",
                 "commands": ["admincoins", "admincrystals", "adminmaterials", "admincard", "addstat", "adminreset"],
@@ -863,6 +867,221 @@ class GameCog(commands.Cog):
                 list(self.bot.game.LEADERBOARD_STATS.keys()),
             )
         )
+
+    @commands.command(
+        aliases=["tr"],
+        help="Create, manage, and confirm player trades.",
+        extras={
+            "category": "social",
+            "usage": "y!trade <@user|accept|show|confirm|cancel|add ...>",
+            "examples": ["y!trade @nez", "y!trade accept", "y!tr add -c 10000", "y!tr add -cards -n satoru"],
+            "details": "Start a trade with a mention, accept it, add coins/cards/scrolls, then confirm to complete the exchange.",
+        },
+    )
+    async def trade(self, ctx: commands.Context, *args: str) -> None:
+        profile = await self.bot.game.get_profile(ctx.author.id)
+        if not profile:
+            await ctx.send("Use `y!start` first.")
+            return
+        if ctx.message.mentions:
+            target_member = ctx.message.mentions[0]
+            target_profile = await self.bot.game.get_profile(target_member.id)
+            if not target_profile:
+                await ctx.send("That user must use `y!start` first.")
+                return
+            try:
+                trade = await self.bot.game.create_trade(profile.player_id, target_profile.player_id)
+            except ValueError as exc:
+                await ctx.send(str(exc))
+                return
+            await ctx.send(f"Trade request sent to {target_member.display_name}. They can accept with `y!trade accept`.")
+            return
+        if not args:
+            await ctx.send("Use `y!trade @user`, `y!trade accept`, `y!trade show`, `y!trade add ...`, `y!trade confirm`, or `y!trade cancel`.")
+            return
+        action = args[0].lower().strip()
+        try:
+            if action == "accept":
+                trade = await self.bot.game.accept_trade(profile.player_id)
+                await ctx.send("Trade accepted. Both sides can now add offers and confirm.")
+            elif action == "show":
+                trade = await self.bot.game.get_active_trade(profile.player_id)
+                if not trade:
+                    await ctx.send("You are not in an active trade.")
+                    return
+                await ctx.send(embed=self._trade_embed(trade))
+            elif action == "confirm":
+                trade = await self.bot.game.confirm_trade(profile.player_id)
+                if trade["status"] == "completed":
+                    await ctx.send("Trade completed successfully.")
+                else:
+                    await ctx.send("Trade confirmed. Waiting for the other player.")
+            elif action == "cancel":
+                await self.bot.game.cancel_trade(profile.player_id)
+                await ctx.send("Trade cancelled.")
+            elif action == "add":
+                trade = await self._handle_trade_add(ctx, profile.player_id, list(args[1:]))
+                await ctx.send(embed=self._trade_embed(trade))
+            else:
+                await ctx.send("Unknown trade action. Use `accept`, `show`, `add`, `confirm`, or `cancel`.")
+        except ValueError as exc:
+            await ctx.send(str(exc))
+
+    @commands.command(
+        help="Create and manage a clan.",
+        extras={
+            "category": "social",
+            "usage": "y!clan <create|show|upgrade|pic|vice> ...",
+            "examples": ["y!clan create MyClan", "y!clan show", "y!clan upgrade 100000", "y!clan pic https://..."],
+            "details": "Create a clan, inspect its boosts, upgrade it with coins, set its image, and manage vice leadership.",
+        },
+    )
+    async def clan(self, ctx: commands.Context, action: str | None = None, *args: str) -> None:
+        profile = await self.bot.game.get_profile(ctx.author.id)
+        if not profile:
+            await ctx.send("Use `y!start` first.")
+            return
+        if not action:
+            await ctx.send("Use `y!clan create <name>`, `y!clan show`, `y!clan upgrade <coins>`, `y!clan pic <url>`, or `y!clan vice @user`.")
+            return
+        action = action.lower().strip()
+        try:
+            if action == "create":
+                if not args:
+                    await ctx.send("Use `y!clan create <name>`.")
+                    return
+                clan = await self.bot.game.create_clan(profile.player_id, " ".join(args))
+                await ctx.send(embed=self._clan_embed(clan))
+            elif action == "show":
+                clan = await self.bot.game.get_clan_by_player(profile.player_id)
+                if not clan:
+                    await ctx.send("You are not in a clan.")
+                    return
+                await ctx.send(embed=self._clan_embed(clan))
+            elif action == "upgrade":
+                if not args or not args[0].isdigit():
+                    await ctx.send("Use `y!clan upgrade <coins>`.")
+                    return
+                clan = await self.bot.game.upgrade_clan(profile.player_id, int(args[0]))
+                await ctx.send(embed=self._clan_embed(clan))
+            elif action == "pic":
+                if not args:
+                    await ctx.send("Use `y!clan pic <image_url>`.")
+                    return
+                clan = await self.bot.game.set_clan_image(profile.player_id, args[0])
+                await ctx.send(embed=self._clan_embed(clan))
+            elif action == "vice":
+                if not ctx.message.mentions:
+                    await ctx.send("Mention the user you want to make vice leader.")
+                    return
+                clan = await self.bot.game.promote_vice_leader(profile.player_id, ctx.message.mentions[0].id)
+                await ctx.send(embed=self._clan_embed(clan))
+            else:
+                await ctx.send("Unknown clan action.")
+        except ValueError as exc:
+            await ctx.send(str(exc))
+
+    @commands.command(
+        help="Change the command prefix for this server.",
+        extras={
+            "category": "social",
+            "usage": "y!prefix <new_prefix>",
+            "examples": ["y!prefix .", "y!prefix !"],
+            "details": "Changes the prefix only for the current server. You need Manage Guild permission.",
+        },
+    )
+    async def prefix(self, ctx: commands.Context, new_prefix: str | None = None) -> None:
+        if not ctx.guild:
+            await ctx.send("Server prefixes can only be changed inside a server.")
+            return
+        if new_prefix is None:
+            current = await self.bot.game.get_guild_prefix(ctx.guild.id)
+            await ctx.send(f"The prefix here is `{current}`")
+            return
+        if not ctx.author.guild_permissions.manage_guild:
+            await ctx.send("You need Manage Server permission to change the prefix.")
+            return
+        if len(new_prefix) > 5:
+            await ctx.send("Keep the prefix short, 5 characters or less.")
+            return
+        updated = await self.bot.game.set_guild_prefix(ctx.guild.id, new_prefix)
+        await ctx.send(f"Prefix changed to `{updated}`")
+
+    async def _handle_trade_add(self, ctx: commands.Context, player_id: int, args: list[str]):
+        if not args:
+            raise ValueError("Use `y!tr add -c <coins>`, `-ss <amount>`, `-gs <amount>`, or `-cards -n <name>`.")
+        flag = args[0].lower().strip()
+        if flag == "-c":
+            if len(args) < 2 or not args[1].isdigit():
+                raise ValueError("Use `y!tr add -c <coins>`.")
+            return await self.bot.game.add_trade_assets(player_id, coins=int(args[1]))
+        if flag == "-ss":
+            if len(args) < 2 or not args[1].isdigit():
+                raise ValueError("Use `y!tr add -ss <amount>`.")
+            return await self.bot.game.add_trade_assets(player_id, skill_scrolls=int(args[1]))
+        if flag == "-gs":
+            if len(args) < 2 or not args[1].isdigit():
+                raise ValueError("Use `y!tr add -gs <amount>`.")
+            return await self.bot.game.add_trade_assets(player_id, grade_seals=int(args[1]))
+        if flag == "-cards":
+            if len(args) < 3 or args[1].lower().strip() != "-n":
+                raise ValueError("Use `y!tr add -cards -n <name>`.")
+            return await self.bot.game.add_trade_assets(player_id, cards_by_name=" ".join(args[2:]))
+        raise ValueError("Unknown trade add flag. Use `-c`, `-ss`, `-gs`, or `-cards -n`.")
+
+    def _trade_embed(self, trade: dict[str, object]) -> discord.Embed:
+        embed = discord.Embed(
+            title=f"Trade #{trade['id']}",
+            color=discord.Color.orange(),
+            description=f"Status: **{trade['status']}**",
+        )
+        requester = trade["requester_offer"]
+        receiver = trade["receiver_offer"]
+        embed.add_field(
+            name=f"Requester {'Confirmed' if trade['requester_confirmed'] else 'Pending'}",
+            value=self._format_trade_offer(requester),
+            inline=True,
+        )
+        embed.add_field(
+            name=f"Receiver {'Confirmed' if trade['receiver_confirmed'] else 'Pending'}",
+            value=self._format_trade_offer(receiver),
+            inline=True,
+        )
+        return embed
+
+    def _format_trade_offer(self, offer: dict[str, object]) -> str:
+        cards = ", ".join(f"#{item}" for item in offer["card_ids"]) if offer["card_ids"] else "None"
+        return (
+            f"Coins: {offer['coins']}\n"
+            f"Skill Scrolls: {offer['skill_scrolls']}\n"
+            f"Grade Seals: {offer['grade_seals']}\n"
+            f"Cards: {cards}"
+        )
+
+    def _clan_embed(self, clan: dict[str, object]) -> discord.Embed:
+        embed = discord.Embed(
+            title=f"Clan: {clan['name']}",
+            color=discord.Color.blurple(),
+            description=(
+                f"Level {clan['level']}\n"
+                f"Clan Coin Boost: {clan['coin_boost_pct']}%\n"
+                f"Clan Battle Boost: {clan['battle_boost_pct']}%"
+            ),
+        )
+        embed.add_field(
+            name="Stats",
+            value=(
+                f"XP: {clan['xp']}/{self.bot.game._clan_next_level_xp(clan['level'])}\n"
+                f"Coins Banked: {clan['coins_bank']}\n"
+                f"Members: {len(clan['members'])}"
+            ),
+            inline=False,
+        )
+        member_lines = [f"Player {item['player_id']} - {item['role']}" for item in clan["members"]]
+        embed.add_field(name="Members", value="\n".join(member_lines) or "No members", inline=False)
+        if clan["image_url"]:
+            embed.set_thumbnail(url=str(clan["image_url"]))
+        return embed
 
     @commands.command(
         aliases=["addcoins"],

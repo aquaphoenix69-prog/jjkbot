@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import random
 from datetime import UTC, date, datetime, timedelta
 
@@ -201,6 +202,267 @@ class GameService:
         if not record:
             raise ValueError("Profile not found.")
         return self._profile_from_record(record)
+
+    async def get_guild_prefix(self, guild_id: int) -> str:
+        value = await self.db.fetchval(
+            "SELECT prefix FROM guild_settings WHERE guild_id = $1",
+            guild_id,
+        )
+        return str(value) if value else "y!"
+
+    async def set_guild_prefix(self, guild_id: int, prefix: str) -> str:
+        await self.db.execute(
+            """
+            INSERT INTO guild_settings (guild_id, prefix)
+            VALUES ($1, $2)
+            ON CONFLICT (guild_id) DO UPDATE SET
+                prefix = EXCLUDED.prefix
+            """,
+            guild_id,
+            prefix,
+        )
+        return prefix
+
+    async def create_clan(self, player_id: int, name: str) -> dict[str, object]:
+        existing = await self.db.fetchrow(
+            "SELECT clan_id FROM clan_members WHERE player_id = $1",
+            player_id,
+        )
+        if existing:
+            raise ValueError("You are already in a clan.")
+        if len(name.strip()) < 3:
+            raise ValueError("Clan name must be at least 3 characters long.")
+        clan = await self.db.fetchrow(
+            """
+            INSERT INTO clans (name, leader_player_id)
+            VALUES ($1, $2)
+            RETURNING *
+            """,
+            name.strip(),
+            player_id,
+        )
+        if not clan:
+            raise ValueError("Failed to create clan.")
+        await self.db.execute(
+            """
+            INSERT INTO clan_members (clan_id, player_id, role)
+            VALUES ($1, $2, $3)
+            """,
+            clan["id"],
+            player_id,
+            "leader",
+        )
+        return await self.get_clan_by_player(player_id)
+
+    async def get_clan_by_player(self, player_id: int) -> dict[str, object] | None:
+        clan = await self.db.fetchrow(
+            """
+            SELECT c.*
+            FROM clans c
+            JOIN clan_members cm ON cm.clan_id = c.id
+            WHERE cm.player_id = $1
+            """,
+            player_id,
+        )
+        if not clan:
+            return None
+        members = await self.db.fetch(
+            "SELECT player_id, role FROM clan_members WHERE clan_id = $1 ORDER BY joined_at ASC",
+            clan["id"],
+        )
+        return {
+            "id": clan["id"],
+            "name": clan["name"],
+            "level": clan["level"],
+            "xp": clan["xp"],
+            "coins_bank": clan["coins_bank"],
+            "image_url": clan["image_url"],
+            "leader_player_id": clan["leader_player_id"],
+            "vice_leader_player_id": clan["vice_leader_player_id"],
+            "members": [{"player_id": row["player_id"], "role": row["role"]} for row in members],
+            "coin_boost_pct": clan["level"] * 2,
+            "battle_boost_pct": clan["level"],
+        }
+
+    async def set_clan_image(self, player_id: int, image_url: str) -> dict[str, object]:
+        clan = await self.get_clan_by_player(player_id)
+        if not clan:
+            raise ValueError("You are not in a clan.")
+        role = await self.db.fetchval("SELECT role FROM clan_members WHERE player_id = $1", player_id)
+        if role not in {"leader", "vice_leader"}:
+            raise ValueError("Only the leader or vice leader can change the clan image.")
+        await self.db.execute(
+            "UPDATE clans SET image_url = $2 WHERE id = $1",
+            clan["id"],
+            image_url,
+        )
+        return await self.get_clan_by_player(player_id)
+
+    async def upgrade_clan(self, player_id: int, coins: int) -> dict[str, object]:
+        clan = await self.get_clan_by_player(player_id)
+        if not clan:
+            raise ValueError("You are not in a clan.")
+        role = await self.db.fetchval("SELECT role FROM clan_members WHERE player_id = $1", player_id)
+        if role not in {"leader", "vice_leader"}:
+            raise ValueError("Only the leader or vice leader can upgrade the clan.")
+        profile = await self.get_profile_by_player_id(player_id)
+        if coins < 1:
+            raise ValueError("Upgrade contribution must be at least 1 coin.")
+        if profile.coins < coins:
+            raise ValueError("Not enough coins.")
+        await self.db.executemany(
+            [
+                ("UPDATE players SET coins = coins - $2 WHERE id = $1", (player_id, coins)),
+                ("UPDATE clans SET coins_bank = coins_bank + $2, xp = xp + $2 WHERE id = $1", (clan["id"], coins)),
+            ]
+        )
+        clan_row = await self.db.fetchrow("SELECT * FROM clans WHERE id = $1", clan["id"])
+        if not clan_row:
+            raise ValueError("Clan not found after upgrade.")
+        level = int(clan_row["level"])
+        xp = int(clan_row["xp"])
+        while xp >= self._clan_next_level_xp(level):
+            xp -= self._clan_next_level_xp(level)
+            level += 1
+        await self.db.execute(
+            "UPDATE clans SET level = $2, xp = $3 WHERE id = $1",
+            clan["id"],
+            level,
+            xp,
+        )
+        return await self.get_clan_by_player(player_id)
+
+    async def promote_vice_leader(self, leader_player_id: int, target_user_id: int) -> dict[str, object]:
+        clan = await self.get_clan_by_player(leader_player_id)
+        if not clan:
+            raise ValueError("You are not in a clan.")
+        role = await self.db.fetchval("SELECT role FROM clan_members WHERE player_id = $1", leader_player_id)
+        if role != "leader":
+            raise ValueError("Only the clan leader can assign a vice leader.")
+        target_profile = await self.get_profile(target_user_id)
+        if not target_profile:
+            raise ValueError("That user does not have a profile.")
+        target_membership = await self.db.fetchval("SELECT clan_id FROM clan_members WHERE player_id = $1", target_profile.player_id)
+        if target_membership != clan["id"]:
+            raise ValueError("That user is not in your clan.")
+        await self.db.executemany(
+            [
+                ("UPDATE clan_members SET role = 'member' WHERE clan_id = $1 AND role = 'vice_leader'", (clan["id"],)),
+                ("UPDATE clan_members SET role = 'vice_leader' WHERE player_id = $1", (target_profile.player_id,)),
+                ("UPDATE clans SET vice_leader_player_id = $2 WHERE id = $1", (clan["id"], target_profile.player_id)),
+            ]
+        )
+        return await self.get_clan_by_player(leader_player_id)
+
+    async def create_trade(self, requester_player_id: int, receiver_player_id: int) -> dict[str, object]:
+        if requester_player_id == receiver_player_id:
+            raise ValueError("You cannot trade with yourself.")
+        existing = await self._get_open_trade_for_player(requester_player_id)
+        if existing:
+            raise ValueError("Finish or cancel your current trade first.")
+        other_existing = await self._get_open_trade_for_player(receiver_player_id)
+        if other_existing:
+            raise ValueError("That player is already in another active trade.")
+        row = await self.db.fetchrow(
+            """
+            INSERT INTO trades (
+                requester_player_id, receiver_player_id, requester_offer, receiver_offer
+            )
+            VALUES ($1, $2, $3, $4)
+            RETURNING *
+            """,
+            requester_player_id,
+            receiver_player_id,
+            json.dumps(self._empty_offer()),
+            json.dumps(self._empty_offer()),
+        )
+        if not row:
+            raise ValueError("Failed to create trade.")
+        return self._trade_from_row(row)
+
+    async def accept_trade(self, receiver_player_id: int) -> dict[str, object]:
+        row = await self.db.fetchrow(
+            "SELECT * FROM trades WHERE receiver_player_id = $1 AND status = 'pending' ORDER BY id DESC LIMIT 1",
+            receiver_player_id,
+        )
+        if not row:
+            raise ValueError("You do not have a pending trade request.")
+        await self.db.execute(
+            "UPDATE trades SET status = 'active', updated_at = $2 WHERE id = $1",
+            row["id"],
+            self._now_value(),
+        )
+        updated = await self.db.fetchrow("SELECT * FROM trades WHERE id = $1", row["id"])
+        return self._trade_from_row(updated)
+
+    async def get_active_trade(self, player_id: int) -> dict[str, object] | None:
+        row = await self._get_open_trade_for_player(player_id)
+        return self._trade_from_row(row) if row else None
+
+    async def add_trade_assets(
+        self,
+        player_id: int,
+        *,
+        coins: int = 0,
+        skill_scrolls: int = 0,
+        grade_seals: int = 0,
+        cards_by_name: str | None = None,
+    ) -> dict[str, object]:
+        row = await self._get_open_trade_for_player(player_id)
+        if not row:
+            raise ValueError("You are not in an active trade.")
+        trade = self._trade_from_row(row)
+        side = "requester" if row["requester_player_id"] == player_id else "receiver"
+        offer = dict(trade[f"{side}_offer"])
+        profile = await self.get_profile_by_player_id(player_id)
+
+        if coins:
+            if profile.coins < offer["coins"] + coins:
+                raise ValueError("Not enough coins for that trade offer.")
+            offer["coins"] += coins
+        if skill_scrolls:
+            if profile.skill_scrolls < offer["skill_scrolls"] + skill_scrolls:
+                raise ValueError("Not enough skill scrolls for that trade offer.")
+            offer["skill_scrolls"] += skill_scrolls
+        if grade_seals:
+            if profile.grade_seals < offer["grade_seals"] + grade_seals:
+                raise ValueError("Not enough grade seals for that trade offer.")
+            offer["grade_seals"] += grade_seals
+        if cards_by_name:
+            matched = await self._match_trade_cards(player_id, cards_by_name, offer["card_ids"])
+            if not matched:
+                raise ValueError("No unlocked cards matched that search for trading.")
+            offer["card_ids"].extend(matched)
+
+        await self._save_trade_offer(row["id"], side, offer)
+        updated = await self.db.fetchrow("SELECT * FROM trades WHERE id = $1", row["id"])
+        return self._trade_from_row(updated)
+
+    async def confirm_trade(self, player_id: int) -> dict[str, object]:
+        row = await self._get_open_trade_for_player(player_id)
+        if not row:
+            raise ValueError("You are not in an active trade.")
+        side = "requester" if row["requester_player_id"] == player_id else "receiver"
+        await self.db.execute(
+            f"UPDATE trades SET {side}_confirmed = TRUE, updated_at = $2 WHERE id = $1",
+            row["id"],
+            self._now_value(),
+        )
+        updated = await self.db.fetchrow("SELECT * FROM trades WHERE id = $1", row["id"])
+        trade = self._trade_from_row(updated)
+        if trade["requester_confirmed"] and trade["receiver_confirmed"]:
+            return await self._finalize_trade(updated)
+        return trade
+
+    async def cancel_trade(self, player_id: int) -> None:
+        row = await self._get_open_trade_for_player(player_id)
+        if not row:
+            raise ValueError("You are not in an active trade.")
+        await self.db.execute(
+            "UPDATE trades SET status = 'cancelled', updated_at = $2 WHERE id = $1",
+            row["id"],
+            self._now_value(),
+        )
 
     async def add_character(self, player_id: int, character_key: str) -> int:
         definition = self.character_map.get(character_key)
@@ -881,16 +1143,19 @@ class GameService:
                 raise ValueError("This sorcerer already awakened.")
             if "special grade" not in character.definition.grade.lower():
                 raise ValueError("Only Special Grade units can awaken.")
-            if character.level < 50 or character.grade < 3:
-                raise ValueError("Awakening needs level 50 and grade 3.")
-            if profile.grade_seals < 2 or profile.skill_scrolls < 2:
-                raise ValueError("Awakening needs 2 Grade Seals and 2 Skill Scrolls.")
+            if character.level < 100 or character.grade < 5 or character.enhancement_level < 40 or character.evolution_stage < 3:
+                raise ValueError("Awakening needs level 100, grade 5, enhancement 40, and evo 3.")
+            if profile.grade_seals < 12 or profile.skill_scrolls < 12 or profile.crystals < 5000 or profile.coins < 2500000:
+                raise ValueError("Awakening needs 12 Grade Seals, 12 Skill Scrolls, 5000 Crystals, and 2500000 Coins.")
             await self.db.executemany(
                 [
                     (
                         """
                         UPDATE players
-                        SET grade_seals = grade_seals - 2, skill_scrolls = skill_scrolls - 2
+                        SET grade_seals = grade_seals - 12,
+                            skill_scrolls = skill_scrolls - 12,
+                            crystals = crystals - 5000,
+                            coins = coins - 2500000
                         WHERE id = $1
                         """,
                         (player_id,),
@@ -951,6 +1216,152 @@ class GameService:
                 xp = 0
                 break
         return level, xp, consumed
+
+    def _clan_next_level_xp(self, level: int) -> int:
+        return int(50000 * (1.35 ** max(0, level - 1)))
+
+    def _empty_offer(self) -> dict[str, object]:
+        return {
+            "coins": 0,
+            "skill_scrolls": 0,
+            "grade_seals": 0,
+            "card_ids": [],
+        }
+
+    def _trade_from_row(self, row) -> dict[str, object]:
+        if not row:
+            raise ValueError("Trade not found.")
+        return {
+            "id": row["id"],
+            "requester_player_id": row["requester_player_id"],
+            "receiver_player_id": row["receiver_player_id"],
+            "status": row["status"],
+            "requester_offer": json.loads(row["requester_offer"]),
+            "receiver_offer": json.loads(row["receiver_offer"]),
+            "requester_confirmed": bool(row["requester_confirmed"]),
+            "receiver_confirmed": bool(row["receiver_confirmed"]),
+        }
+
+    async def _get_open_trade_for_player(self, player_id: int):
+        return await self.db.fetchrow(
+            """
+            SELECT *
+            FROM trades
+            WHERE status IN ('pending', 'active')
+              AND (requester_player_id = $1 OR receiver_player_id = $1)
+            ORDER BY id DESC
+            LIMIT 1
+            """,
+            player_id,
+        )
+
+    async def _save_trade_offer(self, trade_id: int, side: str, offer: dict[str, object]) -> None:
+        other_side = "receiver" if side == "requester" else "requester"
+        await self.db.execute(
+            f"""
+            UPDATE trades
+            SET {side}_offer = $2,
+                {side}_confirmed = FALSE,
+                {other_side}_confirmed = FALSE,
+                updated_at = $3
+            WHERE id = $1
+            """,
+            trade_id,
+            json.dumps(offer),
+            self._now_value(),
+        )
+
+    async def _match_trade_cards(self, player_id: int, query: str, excluded_ids: list[int]) -> list[int]:
+        owned = await self.get_owned_characters(player_id, sort_key="id", ascending=True)
+        normalized = query.lower().strip()
+        matched = [
+            character.instance_id
+            for character in owned
+            if not character.locked
+            and character.instance_id not in excluded_ids
+            and normalized in character.definition.name.lower()
+        ]
+        return matched
+
+    async def _finalize_trade(self, row) -> dict[str, object]:
+        trade = self._trade_from_row(row)
+        requester_offer = trade["requester_offer"]
+        receiver_offer = trade["receiver_offer"]
+        requester_id = trade["requester_player_id"]
+        receiver_id = trade["receiver_player_id"]
+        await self._validate_trade_side(requester_id, requester_offer)
+        await self._validate_trade_side(receiver_id, receiver_offer)
+
+        statements: list[tuple[str, tuple[object, ...]]] = [
+            (
+                """
+                UPDATE players
+                SET coins = coins - $2 + $3,
+                    skill_scrolls = skill_scrolls - $4 + $5,
+                    grade_seals = grade_seals - $6 + $7
+                WHERE id = $1
+                """,
+                (
+                    requester_id,
+                    requester_offer["coins"],
+                    receiver_offer["coins"],
+                    requester_offer["skill_scrolls"],
+                    receiver_offer["skill_scrolls"],
+                    requester_offer["grade_seals"],
+                    receiver_offer["grade_seals"],
+                ),
+            ),
+            (
+                """
+                UPDATE players
+                SET coins = coins - $2 + $3,
+                    skill_scrolls = skill_scrolls - $4 + $5,
+                    grade_seals = grade_seals - $6 + $7
+                WHERE id = $1
+                """,
+                (
+                    receiver_id,
+                    receiver_offer["coins"],
+                    requester_offer["coins"],
+                    receiver_offer["skill_scrolls"],
+                    requester_offer["skill_scrolls"],
+                    receiver_offer["grade_seals"],
+                    requester_offer["grade_seals"],
+                ),
+            ),
+        ]
+        statements.extend(
+            ("UPDATE player_characters SET player_id = $2 WHERE id = $1", (card_id, receiver_id))
+            for card_id in requester_offer["card_ids"]
+        )
+        statements.extend(
+            ("UPDATE player_characters SET player_id = $2 WHERE id = $1", (card_id, requester_id))
+            for card_id in receiver_offer["card_ids"]
+        )
+        statements.append(
+            ("UPDATE trades SET status = 'completed', updated_at = $2 WHERE id = $1", (trade["id"], self._now_value()))
+        )
+        await self.db.executemany(statements)
+        updated = await self.db.fetchrow("SELECT * FROM trades WHERE id = $1", trade["id"])
+        return self._trade_from_row(updated)
+
+    async def _validate_trade_side(self, player_id: int, offer: dict[str, object]) -> None:
+        profile = await self.get_profile_by_player_id(player_id)
+        if profile.coins < int(offer["coins"]):
+            raise ValueError("A trade participant no longer has enough coins.")
+        if profile.skill_scrolls < int(offer["skill_scrolls"]):
+            raise ValueError("A trade participant no longer has enough skill scrolls.")
+        if profile.grade_seals < int(offer["grade_seals"]):
+            raise ValueError("A trade participant no longer has enough grade seals.")
+        for card_id in offer["card_ids"]:
+            card = await self.get_character_instance(player_id, int(card_id))
+            if not card:
+                raise ValueError("A trade participant no longer owns one of the offered cards.")
+            if card.locked:
+                raise ValueError("Locked cards cannot be traded.")
+
+    def _now_value(self):
+        return datetime.now(UTC).isoformat() if self.db.is_sqlite else datetime.now(UTC)
 
     def _profile_from_record(self, record) -> PlayerProfile:
         def parse_optional(value):

@@ -93,6 +93,43 @@ CREATE TABLE IF NOT EXISTS pvp_history (
     winner_id BIGINT NOT NULL REFERENCES players(id) ON DELETE CASCADE,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
+
+CREATE TABLE IF NOT EXISTS guild_settings (
+    guild_id BIGINT PRIMARY KEY,
+    prefix TEXT NOT NULL DEFAULT 'y!'
+);
+
+CREATE TABLE IF NOT EXISTS clans (
+    id BIGSERIAL PRIMARY KEY,
+    name TEXT UNIQUE NOT NULL,
+    leader_player_id BIGINT NOT NULL REFERENCES players(id) ON DELETE CASCADE,
+    vice_leader_player_id BIGINT REFERENCES players(id) ON DELETE SET NULL,
+    level INTEGER NOT NULL DEFAULT 1,
+    xp INTEGER NOT NULL DEFAULT 0,
+    coins_bank INTEGER NOT NULL DEFAULT 0,
+    image_url TEXT NOT NULL DEFAULT '',
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS clan_members (
+    clan_id BIGINT NOT NULL REFERENCES clans(id) ON DELETE CASCADE,
+    player_id BIGINT PRIMARY KEY REFERENCES players(id) ON DELETE CASCADE,
+    role TEXT NOT NULL DEFAULT 'member',
+    joined_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS trades (
+    id BIGSERIAL PRIMARY KEY,
+    requester_player_id BIGINT NOT NULL REFERENCES players(id) ON DELETE CASCADE,
+    receiver_player_id BIGINT NOT NULL REFERENCES players(id) ON DELETE CASCADE,
+    status TEXT NOT NULL DEFAULT 'pending',
+    requester_offer TEXT NOT NULL DEFAULT '{}',
+    receiver_offer TEXT NOT NULL DEFAULT '{}',
+    requester_confirmed BOOLEAN NOT NULL DEFAULT FALSE,
+    receiver_confirmed BOOLEAN NOT NULL DEFAULT FALSE,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
 """
 
 SCHEMA_SQL_SQLITE = """
@@ -178,6 +215,43 @@ CREATE TABLE IF NOT EXISTS pvp_history (
     defender_id INTEGER NOT NULL REFERENCES players(id) ON DELETE CASCADE,
     winner_id INTEGER NOT NULL REFERENCES players(id) ON DELETE CASCADE,
     created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS guild_settings (
+    guild_id INTEGER PRIMARY KEY,
+    prefix TEXT NOT NULL DEFAULT 'y!'
+);
+
+CREATE TABLE IF NOT EXISTS clans (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT UNIQUE NOT NULL,
+    leader_player_id INTEGER NOT NULL REFERENCES players(id) ON DELETE CASCADE,
+    vice_leader_player_id INTEGER REFERENCES players(id) ON DELETE SET NULL,
+    level INTEGER NOT NULL DEFAULT 1,
+    xp INTEGER NOT NULL DEFAULT 0,
+    coins_bank INTEGER NOT NULL DEFAULT 0,
+    image_url TEXT NOT NULL DEFAULT '',
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS clan_members (
+    clan_id INTEGER NOT NULL REFERENCES clans(id) ON DELETE CASCADE,
+    player_id INTEGER PRIMARY KEY REFERENCES players(id) ON DELETE CASCADE,
+    role TEXT NOT NULL DEFAULT 'member',
+    joined_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS trades (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    requester_player_id INTEGER NOT NULL REFERENCES players(id) ON DELETE CASCADE,
+    receiver_player_id INTEGER NOT NULL REFERENCES players(id) ON DELETE CASCADE,
+    status TEXT NOT NULL DEFAULT 'pending',
+    requester_offer TEXT NOT NULL DEFAULT '{}',
+    receiver_offer TEXT NOT NULL DEFAULT '{}',
+    requester_confirmed INTEGER NOT NULL DEFAULT 0,
+    receiver_confirmed INTEGER NOT NULL DEFAULT 0,
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 """
 
