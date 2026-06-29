@@ -47,7 +47,7 @@ export default function ChatInterface() {
       setIsTyping(false);
       setMessages(prev => [
         ...prev,
-        { id: Date.now() + 1, sender: 'digi', text: data.response },
+        { id: Date.now() + 1, sender: 'digi', text: data.response, gif: data.gif },
       ]);
     } catch {
       setIsTyping(false);
@@ -98,6 +98,13 @@ export default function ChatInterface() {
               }`}
             >
               <p className="text-sm leading-relaxed text-gray-100">{msg.text}</p>
+              {msg.gif && (
+                <img
+                  src={msg.gif}
+                  alt="love"
+                  className="w-36 h-28 object-cover rounded-lg mt-2 opacity-90"
+                />
+              )}
             </div>
           </div>
         ))}

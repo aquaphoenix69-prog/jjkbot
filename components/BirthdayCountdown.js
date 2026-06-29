@@ -8,10 +8,15 @@ export default function BirthdayCountdown({ onCelebrate }) {
   const calculateTimeLeft = useCallback(() => {
     const now = new Date();
     const currentYear = now.getFullYear();
-    let birthday = new Date(currentYear, 6, 15); // July 15 — update to Sena's actual birthday
+    let birthday = new Date(currentYear, 5, 30); // June 30 — Sena's birthday
+
+    if (now.getMonth() === 5 && now.getDate() === 30) {
+      setIsBirthday(true);
+      return { days: 0, hours: 0, minutes: 0, seconds: 0 };
+    }
 
     if (now > birthday) {
-      birthday = new Date(currentYear + 1, 6, 15);
+      birthday = new Date(currentYear + 1, 5, 30);
     }
 
     const diff = birthday - now;

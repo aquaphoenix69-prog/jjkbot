@@ -5,7 +5,7 @@ export async function POST(request) {
 
   await new Promise(resolve => setTimeout(resolve, 800 + Math.random() * 1200));
 
-  const response = generateDigiResponse(message);
+  const { text, gif } = generateDigiResponse(message);
 
-  return Response.json({ response });
+  return Response.json({ response: text, gif });
 }

@@ -1,0 +1,13 @@
+{
+  "name": "senabot-discord",
+  "version": "1.0.0",
+  "description": "SenaBot — Sena's Digi-Love Companion on Discord",
+  "main": "bot.js",
+  "scripts": {
+    "start": "node bot.js",
+    "dev": "node bot.js"
+  },
+  "dependencies": {
+    "discord.js": "^14.14.0"
+  }
+}

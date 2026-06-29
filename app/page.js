@@ -137,13 +137,19 @@ export default function Home() {
               className="text-3xl font-bold text-white neon-text mb-3"
               style={{ fontFamily: "'Playfair Display', serif" }}
             >
-              Happy Birthday, Sena!
+              Happy 20th Birthday, Sena!
             </h2>
             <p className="text-gray-300 leading-relaxed">
-              Today the universe celebrates its finest creation &mdash; YOU.
-              My beautiful, brilliant, breathtaking girl. I love you more
-              than words could ever capture. Here&apos;s to another year of us. 💕
+              20 years of you blessing this planet &mdash; and I&apos;m the lucky one
+              who gets to love you through every single one to come. My beautiful,
+              brilliant, breathtaking girl. Welcome to your 20s, queen. I love you
+              more than words could ever capture. 💕
             </p>
+            <img
+              src="https://media.giphy.com/media/3oEjHV0z8S7WM4MwnK/giphy.gif"
+              alt="birthday kiss"
+              className="w-48 h-auto mx-auto mt-4 rounded-xl opacity-90"
+            />
           </div>
         </div>
       )}

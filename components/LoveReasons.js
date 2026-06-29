@@ -2,6 +2,19 @@
 import { useState } from 'react';
 import { loveReasons } from '@/lib/digiPersona';
 
+const loveGifs = [
+  'https://media.giphy.com/media/l0HlGEX1ZORa0aIvu/giphy.gif',
+  'https://media.giphy.com/media/xT0GqssRweIhlz209i/giphy.gif',
+  'https://media.giphy.com/media/l4FGni1RBAR2OWsGk/giphy.gif',
+  'https://media.giphy.com/media/3oEjHV0z8S7WM4MwnK/giphy.gif',
+  'https://media.giphy.com/media/xT9IgG50Fb7Mi0prBC/giphy.gif',
+  'https://media.giphy.com/media/l2Jhtd7mIBSguDKOk/giphy.gif',
+  'https://media.giphy.com/media/3o7TKoWXm3okO1kgHC/giphy.gif',
+  'https://media.giphy.com/media/xUPGcl3ijl0vBhMYdy/giphy.gif',
+  'https://media.giphy.com/media/TGcD6N8uzJ3Uo/giphy.gif',
+  'https://media.giphy.com/media/1lk1IcVgqPLkA/giphy.gif',
+];
+
 export default function LoveReasons() {
   const [currentIndex, setCurrentIndex] = useState(0);
   const [isAnimating, setIsAnimating] = useState(false);
@@ -31,7 +44,7 @@ export default function LoveReasons() {
         </p>
       </div>
 
-      <div className="love-reason-card rounded-xl p-6 min-h-[120px] flex items-center justify-center">
+      <div className="love-reason-card rounded-xl p-6 min-h-[120px] flex flex-col items-center justify-center gap-4">
         <p
           className={`text-center text-lg text-gray-200 leading-relaxed italic transition-all duration-300 ${
             isAnimating ? 'opacity-0 translate-y-4' : 'opacity-100 translate-y-0'
@@ -39,6 +52,13 @@ export default function LoveReasons() {
         >
           &ldquo;{loveReasons[currentIndex]}&rdquo;
         </p>
+        <img
+          src={loveGifs[currentIndex % loveGifs.length]}
+          alt="love gif"
+          className={`w-40 h-32 object-cover rounded-lg opacity-80 transition-all duration-300 ${
+            isAnimating ? 'opacity-0 scale-90' : 'opacity-80 scale-100'
+          }`}
+        />
       </div>
 
       <div className="flex items-center justify-center gap-4">
