@@ -79,7 +79,7 @@ export default function BirthdayCountdown({ onCelebrate }) {
             20 years of you making this world a better place. My beautiful girl is officially in her 20s and I couldn&apos;t be more proud to be yours. I love you endlessly, Sena. 💕
           </p>
           <img
-            src="https://media.giphy.com/media/3oEjHV0z8S7WM4MwnK/giphy.gif"
+            src="https://media.tenor.com/epNKRiMnBT4AAAAM/kiss-love.gif"
             alt="birthday love"
             className="w-48 h-auto mx-auto rounded-xl opacity-90"
           />

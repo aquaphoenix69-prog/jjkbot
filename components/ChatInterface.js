@@ -6,7 +6,7 @@ export default function ChatInterface() {
     {
       id: 1,
       sender: 'digi',
-      text: "[Sena] hey baby 💕 i've been waiting for you. talk to me, im all yours",
+      text: "hey baby 💕 i've been waiting for you. talk to me, im all yours",
     },
   ]);
   const [input, setInput] = useState('');

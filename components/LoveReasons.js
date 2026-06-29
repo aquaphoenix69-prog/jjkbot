@@ -3,16 +3,16 @@ import { useState } from 'react';
 import { loveReasons } from '@/lib/digiPersona';
 
 const loveGifs = [
-  'https://media.giphy.com/media/l0HlGEX1ZORa0aIvu/giphy.gif',
-  'https://media.giphy.com/media/xT0GqssRweIhlz209i/giphy.gif',
-  'https://media.giphy.com/media/l4FGni1RBAR2OWsGk/giphy.gif',
-  'https://media.giphy.com/media/3oEjHV0z8S7WM4MwnK/giphy.gif',
-  'https://media.giphy.com/media/xT9IgG50Fb7Mi0prBC/giphy.gif',
-  'https://media.giphy.com/media/l2Jhtd7mIBSguDKOk/giphy.gif',
-  'https://media.giphy.com/media/3o7TKoWXm3okO1kgHC/giphy.gif',
-  'https://media.giphy.com/media/xUPGcl3ijl0vBhMYdy/giphy.gif',
-  'https://media.giphy.com/media/TGcD6N8uzJ3Uo/giphy.gif',
-  'https://media.giphy.com/media/1lk1IcVgqPLkA/giphy.gif',
+  'https://media.tenor.com/jF0On5VjMFsAAAAM/cute-love.gif',
+  'https://media.tenor.com/83gHRJBVFBQAAAAM/love-couple.gif',
+  'https://media.tenor.com/nJhMPGk-8IYAAAAM/love-you.gif',
+  'https://media.tenor.com/YTHVwFiYzgIAAAAM/love-heart.gif',
+  'https://media.tenor.com/epNKRiMnBT4AAAAM/kiss-love.gif',
+  'https://media.tenor.com/fzZgWl4g-OIAAAAM/love-kiss.gif',
+  'https://media.tenor.com/UwZ5XsMfBXoAAAAM/hug-love.gif',
+  'https://media.tenor.com/SOqPMiGMn_AAAAAM/kiss-anime.gif',
+  'https://media.tenor.com/v-l2gq_FyhMAAAAM/couple-love.gif',
+  'https://media.tenor.com/uC-bAH4JNgYAAAAM/kiss-couple.gif',
 ];
 
 export default function LoveReasons() {

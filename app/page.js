@@ -144,7 +144,7 @@ export default function Home() {
               who gets to love you through every single one to come. Welcome to your 20s, queen. 💕
             </p>
             <img
-              src="https://media.giphy.com/media/3oEjHV0z8S7WM4MwnK/giphy.gif"
+              src="https://media.tenor.com/epNKRiMnBT4AAAAM/kiss-love.gif"
               alt="birthday kiss"
               className="w-36 sm:w-48 h-auto mx-auto mt-3 sm:mt-4 rounded-xl opacity-90"
             />
