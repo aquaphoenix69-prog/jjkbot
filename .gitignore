@@ -1,5 +1,8 @@
+node_modules/
+.next/
+out/
 .env
-*.db
+.env.local
+.env.production
 *.log
-__pycache__/
-*.pyc
+*.db
