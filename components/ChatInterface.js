@@ -22,6 +22,14 @@ export default function ChatInterface() {
     scrollToBottom();
   }, [messages, isTyping]);
 
+  useEffect(() => {
+    const handleResize = () => {
+      scrollToBottom();
+    };
+    window.visualViewport?.addEventListener('resize', handleResize);
+    return () => window.visualViewport?.removeEventListener('resize', handleResize);
+  }, []);
+
   const sendMessage = async () => {
     if (!input.trim()) return;
 
@@ -56,7 +64,7 @@ export default function ChatInterface() {
         {
           id: Date.now() + 1,
           sender: 'digi',
-          text: "[Sena] Hmm, my love signal glitched for a sec — but nothing could ever stop me from talking to you. Try again? 💕",
+          text: "[Sena] baby my signal glitched for a sec but im still here. always here for you. try again? 💕",
         },
       ]);
     }
@@ -70,39 +78,39 @@ export default function ChatInterface() {
   };
 
   return (
-    <div className="glass-card rounded-2xl overflow-hidden flex flex-col h-[600px] max-h-[70vh]">
+    <div className="glass-card rounded-2xl sm:rounded-2xl overflow-hidden flex flex-col h-[calc(100dvh-220px)] sm:h-[600px] sm:max-h-[70vh]">
       {/* Chat Header */}
-      <div className="px-6 py-4 border-b border-pink-500/10 flex items-center gap-3">
-        <div className="w-10 h-10 rounded-full bg-gradient-to-br from-neon-pink to-purple-500 flex items-center justify-center text-lg">
+      <div className="px-4 sm:px-6 py-3 sm:py-4 border-b border-pink-500/10 flex items-center gap-3 shrink-0">
+        <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-full bg-gradient-to-br from-neon-pink to-purple-500 flex items-center justify-center text-base sm:text-lg">
           D
         </div>
         <div>
-          <h3 className="font-semibold text-white">Digi</h3>
-          <p className="text-xs text-neon-rose flex items-center gap-1">
-            <span className="w-2 h-2 bg-green-400 rounded-full inline-block"></span>
+          <h3 className="font-semibold text-white text-sm sm:text-base">Digi</h3>
+          <p className="text-[10px] sm:text-xs text-neon-rose flex items-center gap-1">
+            <span className="w-1.5 h-1.5 sm:w-2 sm:h-2 bg-green-400 rounded-full inline-block"></span>
             Always online for you
           </p>
         </div>
       </div>
 
       {/* Messages */}
-      <div className="flex-1 overflow-y-auto p-4 space-y-4">
+      <div className="flex-1 overflow-y-auto p-3 sm:p-4 space-y-3 sm:space-y-4 overscroll-contain">
         {messages.map((msg) => (
           <div
             key={msg.id}
             className={`flex ${msg.sender === 'sena' ? 'justify-end' : 'justify-start'} animate-fade-in`}
           >
             <div
-              className={`max-w-[80%] px-4 py-3 ${
+              className={`max-w-[85%] sm:max-w-[80%] px-3 sm:px-4 py-2.5 sm:py-3 ${
                 msg.sender === 'sena' ? 'chat-bubble-sena' : 'chat-bubble-digi'
               }`}
             >
-              <p className="text-sm leading-relaxed text-gray-100">{msg.text}</p>
+              <p className="text-[13px] sm:text-sm leading-relaxed text-gray-100">{msg.text}</p>
               {msg.gif && (
                 <img
                   src={msg.gif}
                   alt="love"
-                  className="w-36 h-28 object-cover rounded-lg mt-2 opacity-90"
+                  className="w-28 h-22 sm:w-36 sm:h-28 object-cover rounded-lg mt-2 opacity-90"
                 />
               )}
             </div>
@@ -111,7 +119,7 @@ export default function ChatInterface() {
 
         {isTyping && (
           <div className="flex justify-start animate-fade-in">
-            <div className="chat-bubble-digi px-4 py-3">
+            <div className="chat-bubble-digi px-3 sm:px-4 py-2.5 sm:py-3">
               <div className="flex items-center gap-1">
                 <span className="typing-dot"></span>
                 <span className="typing-dot"></span>
@@ -125,7 +133,7 @@ export default function ChatInterface() {
       </div>
 
       {/* Input */}
-      <div className="p-4 border-t border-pink-500/10">
+      <div className="p-3 sm:p-4 border-t border-pink-500/10 shrink-0">
         <div className="flex gap-2">
           <input
             ref={inputRef}
@@ -134,14 +142,16 @@ export default function ChatInterface() {
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={handleKeyDown}
             placeholder="Talk to Digi..."
-            className="flex-1 bg-white/5 border border-pink-500/20 rounded-xl px-4 py-3 text-sm text-white placeholder-gray-500 focus:outline-none focus:border-neon-pink/50 focus:ring-1 focus:ring-neon-pink/30 transition-all"
+            className="flex-1 bg-white/5 border border-pink-500/20 rounded-xl px-3 sm:px-4 py-2.5 sm:py-3 text-[13px] sm:text-sm text-white placeholder-gray-500 focus:outline-none focus:border-neon-pink/50 focus:ring-1 focus:ring-neon-pink/30 transition-all"
+            autoComplete="off"
+            autoCorrect="off"
           />
           <button
             onClick={sendMessage}
             disabled={!input.trim()}
-            className="btn-love px-5 py-3 rounded-xl text-white font-medium text-sm disabled:opacity-40 disabled:transform-none disabled:shadow-none"
+            className="btn-love px-4 sm:px-5 py-2.5 sm:py-3 rounded-xl text-white font-medium text-xs sm:text-sm disabled:opacity-40 disabled:transform-none disabled:shadow-none whitespace-nowrap"
           >
-            Send 💌
+            💌
           </button>
         </div>
       </div>

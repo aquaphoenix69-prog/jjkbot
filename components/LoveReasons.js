@@ -36,17 +36,17 @@ export default function LoveReasons() {
   };
 
   return (
-    <div className="glass-card rounded-2xl p-6 space-y-6">
+    <div className="glass-card rounded-2xl p-4 sm:p-6 space-y-4 sm:space-y-6">
       <div className="text-center">
-        <h2 className="text-2xl font-bold neon-text">Reasons I Love You</h2>
-        <p className="text-sm text-gray-400 mt-1">
+        <h2 className="text-xl sm:text-2xl font-bold neon-text">Reasons I Love You</h2>
+        <p className="text-xs sm:text-sm text-gray-400 mt-1">
           #{currentIndex + 1} of {loveReasons.length} (and counting forever...)
         </p>
       </div>
 
-      <div className="love-reason-card rounded-xl p-6 min-h-[120px] flex flex-col items-center justify-center gap-4">
+      <div className="love-reason-card rounded-xl p-4 sm:p-6 min-h-[100px] flex flex-col items-center justify-center gap-3 sm:gap-4">
         <p
-          className={`text-center text-lg text-gray-200 leading-relaxed italic transition-all duration-300 ${
+          className={`text-center text-sm sm:text-lg text-gray-200 leading-relaxed italic transition-all duration-300 ${
             isAnimating ? 'opacity-0 translate-y-4' : 'opacity-100 translate-y-0'
           }`}
         >
@@ -55,28 +55,28 @@ export default function LoveReasons() {
         <img
           src={loveGifs[currentIndex % loveGifs.length]}
           alt="love gif"
-          className={`w-40 h-32 object-cover rounded-lg opacity-80 transition-all duration-300 ${
+          className={`w-32 h-24 sm:w-40 sm:h-32 object-cover rounded-lg opacity-80 transition-all duration-300 ${
             isAnimating ? 'opacity-0 scale-90' : 'opacity-80 scale-100'
           }`}
         />
       </div>
 
-      <div className="flex items-center justify-center gap-4">
+      <div className="flex items-center justify-center gap-3 sm:gap-4">
         <button
           onClick={prevReason}
-          className="w-10 h-10 rounded-full border border-pink-500/30 flex items-center justify-center text-neon-rose hover:bg-pink-500/10 transition-all"
+          className="w-9 h-9 sm:w-10 sm:h-10 rounded-full border border-pink-500/30 flex items-center justify-center text-neon-rose hover:bg-pink-500/10 active:bg-pink-500/20 transition-all"
         >
           &larr;
         </button>
         <button
           onClick={nextReason}
-          className="btn-love px-6 py-2.5 rounded-xl text-white font-medium text-sm"
+          className="btn-love px-4 sm:px-6 py-2 sm:py-2.5 rounded-xl text-white font-medium text-xs sm:text-sm active:scale-95"
         >
-          Show me more love 💝
+          More love 💝
         </button>
         <button
           onClick={nextReason}
-          className="w-10 h-10 rounded-full border border-pink-500/30 flex items-center justify-center text-neon-rose hover:bg-pink-500/10 transition-all"
+          className="w-9 h-9 sm:w-10 sm:h-10 rounded-full border border-pink-500/30 flex items-center justify-center text-neon-rose hover:bg-pink-500/10 active:bg-pink-500/20 transition-all"
         >
           &rarr;
         </button>
