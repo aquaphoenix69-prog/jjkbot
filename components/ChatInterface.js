@@ -6,7 +6,7 @@ export default function ChatInterface() {
     {
       id: 1,
       sender: 'digi',
-      text: "[Sena] Hey beautiful! I've been waiting for you. Talk to me — I'm all yours, always. 💕",
+      text: "[Sena] hey baby 💕 i've been waiting for you. talk to me, im all yours",
     },
   ]);
   const [input, setInput] = useState('');
@@ -40,7 +40,7 @@ export default function ChatInterface() {
       const res = await fetch('/api/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ message: currentInput }),
+        body: JSON.stringify({ message: currentInput, history: [...messages, userMessage] }),
       });
       const data = await res.json();
 
